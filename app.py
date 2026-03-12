@@ -13,6 +13,8 @@ import asyncio
 import urllib.request
 import urllib.parse
 import base64
+from dotenv import load_dotenv
+load_dotenv()
 from io import BytesIO
 from flask import Flask, request, jsonify, render_template_string
 from groq import Groq
@@ -22,7 +24,7 @@ import edge_tts
 #                     CONFIGURATION
 # =============================================================
 
-GROQ_API_KEY = "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"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 AI_MODEL     = "llama-3.3-70b-versatile"
 
 TTS_VOICE_EN = "en-US-JennyNeural"
