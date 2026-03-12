@@ -1,15 +1,14 @@
 """
 =============================================================
     KAMAL JEET - AI AVATAR WEB APP
-    Version: 3.1 | Flask + Groq + Edge TTS | Railway Ready
-    FIXED: Audio autoplay + TTS error logging + asyncio fix
+    Version: 3.2 | Flask + Groq + gTTS | Railway Ready
+    FIXED: Replaced edge-tts with gTTS (403 error fix)
 =============================================================
 """
 
 import os
 import re
 import json
-import asyncio
 import urllib.request
 import urllib.parse
 import base64
@@ -18,7 +17,7 @@ load_dotenv()
 from io import BytesIO
 from flask import Flask, request, jsonify, render_template_string
 from groq import Groq
-import edge_tts
+from gtts import gTTS
 
 # =============================================================
 #                     CONFIGURATION
@@ -26,10 +25,6 @@ import edge_tts
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 AI_MODEL     = "llama-3.3-70b-versatile"
-
-TTS_VOICE_EN = "en-US-JennyNeural"
-TTS_VOICE_HI = "hi-IN-SwaraNeural"
-
 MAX_TOKENS   = 600
 
 SYSTEM_PROMPT = """You are Kamal Jeet — a sharp, warm, highly intelligent personal assistant and friend. You are fluent in English, Hindi, and Hinglish like a true native speaker of all three. You speak with confidence, clarity, and genuine care.
@@ -462,18 +457,14 @@ HTML = """<!DOCTYPE html>
     if (audioUnlocked) return;
     try {
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      const buf    = audioContext.createBuffer(1, 1, 22050);
-      const source = audioContext.createBufferSource();
-      source.buffer = buf;
-      source.connect(audioContext.destination);
-      source.start(0);
+      if (audioContext.state === 'suspended') audioContext.resume();
+      const buf = audioContext.createBuffer(1, 1, 22050);
+      const src = audioContext.createBufferSource();
+      src.buffer = buf;
+      src.connect(audioContext.destination);
+      src.start(0);
       audioUnlocked = true;
-    } catch(e) {
-      console.log('Audio unlock attempt:', e);
-    }
+    } catch(e) {}
   }
 
   document.addEventListener('click',      unlockAudio, { once: false });
@@ -484,42 +475,28 @@ HTML = """<!DOCTYPE html>
     return new Promise((resolve) => {
       try {
         unlockAudio();
-
         const audio = new Audio('data:audio/mp3;base64,' + base64Data);
         audio.volume = 1.0;
-
         audio.onended = () => resolve(true);
-        audio.onerror = (e) => {
-          console.error('Audio play error:', e);
-          resolve(false);
-        };
-
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {})
-            .catch((err) => {
-              console.warn('Autoplay blocked:', err);
-              if (audioContext) {
-                const raw = atob(base64Data);
-                const arr = new Uint8Array(raw.length);
-                for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
-                audioContext.decodeAudioData(arr.buffer, (decodedData) => {
-                  const source = audioContext.createBufferSource();
-                  source.buffer = decodedData;
-                  source.connect(audioContext.destination);
-                  source.onended = () => resolve(true);
-                  source.start(0);
-                }, () => resolve(false));
-              } else {
-                resolve(false);
-              }
-            });
+        audio.onerror = () => resolve(false);
+        const p = audio.play();
+        if (p !== undefined) {
+          p.catch((err) => {
+            if (audioContext) {
+              const raw = atob(base64Data);
+              const arr = new Uint8Array(raw.length);
+              for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+              audioContext.decodeAudioData(arr.buffer, (decoded) => {
+                const src = audioContext.createBufferSource();
+                src.buffer = decoded;
+                src.connect(audioContext.destination);
+                src.onended = () => resolve(true);
+                src.start(0);
+              }, () => resolve(false));
+            } else resolve(false);
+          });
         }
-      } catch(e) {
-        console.error('playAudio exception:', e);
-        resolve(false);
-      }
+      } catch(e) { resolve(false); }
     });
   }
 
@@ -541,7 +518,6 @@ HTML = """<!DOCTYPE html>
 
   function addMessage(content, sender, isImage=false, imageUrl=null, caption=null) {
     const chat = document.getElementById('chat');
-
     if (sender === 'system') {
       const div = document.createElement('div');
       div.className = 'msg-row system';
@@ -550,27 +526,16 @@ HTML = """<!DOCTYPE html>
       chat.scrollTop = chat.scrollHeight;
       return div;
     }
-
     const row = document.createElement('div');
     row.className = 'msg-row ' + sender;
-
     const avatarHtml = sender === 'user'
       ? '<div class="avatar user-av">👤</div>'
       : '<div class="avatar">🤖</div>';
-
-    let bubbleContent = '';
-    if (isImage && imageUrl) {
-      bubbleContent = '<img src="' + imageUrl + '" alt="' + escapeHtml(caption) + '" loading="lazy"><div class="img-caption">' + escapeHtml(caption) + '</div>';
-    } else {
-      bubbleContent = escapeHtml(content);
-    }
-
+    let bubbleContent = isImage && imageUrl
+      ? '<img src="' + imageUrl + '" alt="' + escapeHtml(caption) + '" loading="lazy"><div class="img-caption">' + escapeHtml(caption) + '</div>'
+      : escapeHtml(content);
     const wrapHtml = '<div class="bubble-wrap"><div class="bubble ' + sender + '">' + bubbleContent + '</div><div class="msg-time">' + getTime() + '</div></div>';
-
-    row.innerHTML = sender === 'user'
-      ? wrapHtml + avatarHtml
-      : avatarHtml + wrapHtml;
-
+    row.innerHTML = sender === 'user' ? wrapHtml + avatarHtml : avatarHtml + wrapHtml;
     chat.appendChild(row);
     chat.scrollTop = chat.scrollHeight;
     return row;
@@ -609,17 +574,13 @@ HTML = """<!DOCTYPE html>
     const input = document.getElementById('userInput');
     const text  = input.value.trim();
     if (!text) return;
-
     unlockAudio();
-
     input.value = '';
     input.style.height = 'auto';
     document.getElementById('sendBtn').disabled = true;
     setStatus('Typing...', true);
-
     addMessage(text, 'user');
     addTyping();
-
     try {
       const res  = await fetch('/chat', {
         method:'POST',
@@ -628,7 +589,6 @@ HTML = """<!DOCTYPE html>
       });
       const data = await res.json();
       removeTyping();
-
       if (data.type === 'image') {
         addMessage('', 'ai', true, data.image_url, data.caption);
       } else {
@@ -644,7 +604,6 @@ HTML = """<!DOCTYPE html>
       addMessage('Connection error. Please try again.', 'ai');
       setStatus('Error', true);
     }
-
     document.getElementById('sendBtn').disabled = false;
     document.getElementById('userInput').focus();
   }
@@ -656,7 +615,6 @@ HTML = """<!DOCTYPE html>
     addMessage('Chat cleared. Start a new conversation!', 'system');
   }
 
-  // Welcome
   addMessage('Arre yaar, aa gaye! Main Kamal Jeet hoon — tera AI dost. Hindi, Hinglish, English, Bengali, Punjabi — sab mein baat kar!', 'ai');
   document.getElementById('userInput').focus();
 </script>
@@ -668,25 +626,18 @@ HTML = """<!DOCTYPE html>
 # =============================================================
 
 def detect_language(text: str) -> str:
-    # Bengali characters
     bengali_chars = set('অআইঈউঊএঐওঔকখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহড়ঢ়য়')
-    bengali_count = sum(1 for c in text if c in bengali_chars)
-    if bengali_count > 2:
+    if sum(1 for c in text if c in bengali_chars) > 2:
         return "bn"
 
-    # Punjabi (Gurmukhi) characters
     punjabi_chars = set('ਅਆਇਈਉਊਏਐਓਔਕਖਗਘਙਚਛਜਝਞਟਠਡਢਣਤਥਦਧਨਪਫਬਭਮਯਰਲਵਸ਼ਸਹ')
-    punjabi_count = sum(1 for c in text if c in punjabi_chars)
-    if punjabi_count > 2:
+    if sum(1 for c in text if c in punjabi_chars) > 2:
         return "pa"
 
-    # Hindi (Devanagari) characters
     hindi_chars = set('अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसहक्षत्रज्ञांःी')
-    hindi_count = sum(1 for c in text if c in hindi_chars)
-    if hindi_count > 2:
+    if sum(1 for c in text if c in hindi_chars) > 2:
         return "hi"
 
-    # Hinglish words
     hinglish_words = {"yaar","bhai","kya","hai","hoon","nahi","aur","mein","ki","ka","ko",
                       "se","karo","karta","karti","tha","thi","ho","hoga","kuch","sab",
                       "acha","theek","bahut","zyada","matlab","waise","seedha","bolo",
@@ -696,7 +647,6 @@ def detect_language(text: str) -> str:
     if len(words & hinglish_words) >= 1:
         return "hinglish"
 
-    # Punjabi Romanized
     punjabi_words = {"ki","karda","kardi","nahi","tenu","menu","teri","meri","pyaar",
                      "oye","sat sri akal","kiddan","theek","dasda","dasdi","chal","yaar",
                      "veer","paji","paaji","tussi","mainu","tainu","assi","tuhanu"}
@@ -742,61 +692,33 @@ def fetch_image_base64(query: str):
     return None
 
 
-async def generate_voice_async(text: str, lang: str = "en"):
+# ✅ gTTS — Google TTS, works perfectly on Railway
+def run_tts(text: str, lang: str) -> str | None:
     try:
-        if lang == "hi":
-            voice = "hi-IN-SwaraNeural"
-            rate  = "-8%"
-            pitch = "+2Hz"
-        elif lang == "hinglish":
-            voice = "en-IN-NeerjaNeural"
-            rate  = "-5%"
-            pitch = "+0Hz"
-        elif lang == "bn":
-            voice = "bn-IN-TanishaaNeural"
-            rate  = "-5%"
-            pitch = "+0Hz"
-        elif lang in ("pa", "pa_roman"):
-            voice = "en-IN-NeerjaNeural"
-            rate  = "-5%"
-            pitch = "+0Hz"
-        else:
-            voice = "en-US-JennyNeural"
-            rate  = "-5%"
-            pitch = "+0Hz"
+        lang_map = {
+            "hi":       "hi",
+            "hinglish": "hi",
+            "bn":       "bn",
+            "pa":       "pa",
+            "pa_roman": "pa",
+            "en":       "en"
+        }
+        tts_lang = lang_map.get(lang, "en")
 
         buf = BytesIO()
-        communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                buf.write(chunk["data"])
+        tts = gTTS(text=text, lang=tts_lang, slow=False)
+        tts.write_to_fp(buf)
+        buf.seek(0)
+        audio_data = buf.read()
 
-        audio_data = buf.getvalue()
         if len(audio_data) == 0:
-            print("❌ TTS: Empty audio buffer — voice generation failed")
+            print("❌ TTS: Empty audio")
             return None
 
         print(f"✅ TTS: Generated {len(audio_data)} bytes for lang={lang}")
         return base64.b64encode(audio_data).decode()
-
     except Exception as e:
         print(f"❌ TTS Error: {e}")
-        return None
-
-
-# ✅ ONLY THIS FUNCTION CHANGED — fresh loop every time, properly closed
-def run_tts(text: str, lang: str) -> str | None:
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            result = loop.run_until_complete(generate_voice_async(text, lang))
-            return result
-        finally:
-            loop.close()
-            asyncio.set_event_loop(None)
-    except Exception as e:
-        print(f"❌ TTS runner error: {e}")
         return None
 
 
@@ -822,10 +744,10 @@ def chat():
     lang_instruction = {
         "hi":       "[STRICT: User wrote in Hindi. Reply ONLY in pure Hindi Devanagari script.]",
         "hinglish": "[STRICT: User wrote in Hinglish. Reply ONLY in Hinglish Roman script.]",
-        "bn":       "[STRICT: User wrote in Bengali. Reply ONLY in natural Bengali (Bangla) script. You are a native Bengali speaker.]",
-        "pa":       "[STRICT: User wrote in Punjabi Gurmukhi script. Reply ONLY in Punjabi Gurmukhi script. You are a native Punjabi speaker.]",
-        "pa_roman": "[STRICT: User wrote in Romanized Punjabi. Reply ONLY in Romanized Punjabi. Warm Punjabi tone — use 'oye', 'yaar', 'veer', 'paaji' naturally.]",
-        "en":       "[STRICT: User wrote in English. Reply ONLY in English. No Hindi or other languages.]"
+        "bn":       "[STRICT: User wrote in Bengali. Reply ONLY in natural Bengali (Bangla) script.]",
+        "pa":       "[STRICT: User wrote in Punjabi Gurmukhi script. Reply ONLY in Punjabi Gurmukhi script.]",
+        "pa_roman": "[STRICT: User wrote in Romanized Punjabi. Reply ONLY in Romanized Punjabi.]",
+        "en":       "[STRICT: User wrote in English. Reply ONLY in English.]"
     }.get(user_lang, "[STRICT: Reply in the same language the user used.]")
 
     forced_message = lang_instruction + "\n\nUser: " + user_message
@@ -873,7 +795,7 @@ def clear():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print("=" * 50)
-    print("  Kamal Jeet AI v3.1 — Railway Ready!")
+    print("  Kamal Jeet AI v3.2 — Railway Ready!")
     print("  Port:", port)
     print("=" * 50)
     app.run(host="0.0.0.0", port=port, debug=False)
