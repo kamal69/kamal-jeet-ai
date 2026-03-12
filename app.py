@@ -411,7 +411,13 @@ def chat():
 
     audio_b64 = None
     if want_voice:
-        audio_b64 = asyncio.run(generate_voice_async(reply, user_lang))
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            audio_b64 = loop.run_until_complete(generate_voice_async(reply, user_lang))
+            loop.close()
+        except Exception:
+            audio_b64 = None
 
     return jsonify({"type": "text", "reply": reply, "audio": audio_b64})
 

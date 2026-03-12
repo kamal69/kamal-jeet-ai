@@ -1,3 +1,4 @@
-flask
-groq
-edge-tts
+flask==3.0.3
+groq==0.9.0
+edge-tts==6.1.10
+gunicorn==22.0.0
