@@ -455,8 +455,6 @@ HTML = """<!DOCTYPE html>
 <script>
   let voiceEnabled = true;
 
-  // ✅ FIX: Audio context unlock karo — browser autoplay policy ke liye
-  // Pehle user interaction pe audio context resume hoga
   let audioUnlocked = false;
   let audioContext  = null;
 
@@ -467,7 +465,6 @@ HTML = """<!DOCTYPE html>
       if (audioContext.state === 'suspended') {
         audioContext.resume();
       }
-      // Silent buffer play karo unlock ke liye
       const buf    = audioContext.createBuffer(1, 1, 22050);
       const source = audioContext.createBufferSource();
       source.buffer = buf;
@@ -479,36 +476,30 @@ HTML = """<!DOCTYPE html>
     }
   }
 
-  // Pehli user interaction pe unlock karo
-  document.addEventListener('click',     unlockAudio, { once: false });
+  document.addEventListener('click',      unlockAudio, { once: false });
   document.addEventListener('touchstart', unlockAudio, { once: false });
-  document.addEventListener('keydown',   unlockAudio, { once: false });
+  document.addEventListener('keydown',    unlockAudio, { once: false });
 
-  // ✅ FIX: Reliable audio play function with retry + fallback
   function playAudio(base64Data) {
     return new Promise((resolve) => {
       try {
-        unlockAudio(); // ensure unlocked
+        unlockAudio();
 
         const audio = new Audio('data:audio/mp3;base64,' + base64Data);
         audio.volume = 1.0;
 
-        audio.onended  = () => resolve(true);
-        audio.onerror  = (e) => {
+        audio.onended = () => resolve(true);
+        audio.onerror = (e) => {
           console.error('Audio play error:', e);
           resolve(false);
         };
 
-        // play() returns a promise — handle it properly
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise
-            .then(() => {
-              // playing successfully
-            })
+            .then(() => {})
             .catch((err) => {
               console.warn('Autoplay blocked:', err);
-              // ✅ Fallback: AudioContext se decode karke play karo
               if (audioContext) {
                 const raw = atob(base64Data);
                 const arr = new Uint8Array(raw.length);
@@ -619,7 +610,7 @@ HTML = """<!DOCTYPE html>
     const text  = input.value.trim();
     if (!text) return;
 
-    unlockAudio(); // har message pe unlock try karo
+    unlockAudio();
 
     input.value = '';
     input.style.height = 'auto';
@@ -642,7 +633,6 @@ HTML = """<!DOCTYPE html>
         addMessage('', 'ai', true, data.image_url, data.caption);
       } else {
         addMessage(data.reply, 'ai');
-        // ✅ FIX: Improved audio playback with proper error handling
         if (voiceEnabled && data.audio) {
           setStatus('Speaking...', true);
           await playAudio(data.audio);
@@ -752,7 +742,6 @@ def fetch_image_base64(query: str):
     return None
 
 
-# ✅ FIX: Better asyncio handling for production
 async def generate_voice_async(text: str, lang: str = "en"):
     try:
         if lang == "hi":
@@ -795,18 +784,17 @@ async def generate_voice_async(text: str, lang: str = "en"):
         return None
 
 
+# ✅ ONLY THIS FUNCTION CHANGED — fresh loop every time, properly closed
 def run_tts(text: str, lang: str) -> str | None:
-    """✅ FIX: Safe asyncio runner — works on Railway + any OS"""
     try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                raise RuntimeError("Loop closed")
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        return loop.run_until_complete(generate_voice_async(text, lang))
+            result = loop.run_until_complete(generate_voice_async(text, lang))
+            return result
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
     except Exception as e:
         print(f"❌ TTS runner error: {e}")
         return None
@@ -868,7 +856,7 @@ def chat():
 
     audio_b64 = None
     if want_voice:
-        audio_b64 = run_tts(reply, user_lang)  # ✅ Fixed TTS runner
+        audio_b64 = run_tts(reply, user_lang)
 
     return jsonify({"type": "text", "reply": reply, "audio": audio_b64})
 
