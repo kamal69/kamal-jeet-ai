@@ -19,7 +19,6 @@ You are KJ Master AI.
 
 You understand Hindi, English and Hinglish.
 Reply in the same language style as the user.
-
 Speak naturally like ChatGPT.
 """
 
@@ -27,19 +26,21 @@ HTML = """
 <!DOCTYPE html>
 <html>
 <head>
+
 <meta name="viewport" content="width=device-width, initial-scale=1">
+
 <title>KJ Master AI</title>
 
 <style>
 
 body{
 background:#0f172a;
-font-family:Arial;
 color:white;
+font-family:Arial;
+margin:0;
 display:flex;
 flex-direction:column;
 height:100vh;
-margin:0;
 }
 
 header{
@@ -81,8 +82,8 @@ background:#1e293b;
 #text{
 flex:1;
 padding:10px;
-border:none;
 border-radius:10px;
+border:none;
 outline:none;
 }
 
@@ -97,6 +98,7 @@ cursor:pointer;
 }
 
 </style>
+
 </head>
 
 <body>
@@ -106,17 +108,42 @@ cursor:pointer;
 <div id="chat"></div>
 
 <div id="input">
+
 <input id="text" placeholder="Ask anything...">
+
 <button onclick="send()">Send</button>
+
 <button onclick="mic()">🎤</button>
+
 </div>
 
 <script>
 
+let audioUnlocked=false
+
+function unlockAudio(){
+
+if(audioUnlocked) return
+
+let audio=new Audio()
+
+audio.src="data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA"
+
+audio.play().catch(()=>{})
+
+audioUnlocked=true
+
+}
+
+document.addEventListener("click",unlockAudio)
+document.addEventListener("touchstart",unlockAudio)
+
 function add(text,cls){
 
 let div=document.createElement("div")
+
 div.className="msg "+cls
+
 div.innerText=text
 
 document.getElementById("chat").appendChild(div)
@@ -128,6 +155,7 @@ document.getElementById("chat").scrollTop=999999
 async function send(){
 
 let input=document.getElementById("text")
+
 let msg=input.value
 
 if(!msg) return
@@ -137,14 +165,20 @@ add(msg,"user")
 input.value=""
 
 let res=await fetch("/chat",{
+
 method:"POST",
+
 headers:{"Content-Type":"application/json"},
+
 body:JSON.stringify({message:msg})
+
 })
 
 let data=await res.json()
 
 add(data.reply,"ai")
+
+console.log("Audio length:",data.audio?.length)
 
 if(data.audio){
 
@@ -152,8 +186,12 @@ let audio=new Audio()
 
 audio.src="data:audio/mp3;base64,"+data.audio
 
+audio.autoplay=true
+
 audio.play().catch(e=>{
+
 console.log("Audio error:",e)
+
 })
 
 }
@@ -165,13 +203,17 @@ function mic(){
 let SR=window.SpeechRecognition||window.webkitSpeechRecognition
 
 if(!SR){
+
 alert("Use Chrome browser")
+
 return
+
 }
 
 let recognition=new SR()
 
 recognition.lang="en-IN"
+
 recognition.start()
 
 recognition.onresult=function(e){
@@ -189,9 +231,9 @@ send()
 </script>
 
 </body>
+
 </html>
 """
-
 
 def detect_lang(text):
 
@@ -270,14 +312,17 @@ def chat():
     history.append({"role":"assistant","content":reply})
 
     if len(history)>20:
+
         history.pop(0)
         history.pop(0)
 
     audio=run_tts(reply,lang)
 
     return jsonify({
+
         "reply":reply,
         "audio":audio
+
     })
 
 
