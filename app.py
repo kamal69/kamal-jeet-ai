@@ -17,8 +17,8 @@ history = []
 SYSTEM = """
 You are KJ Master AI.
 
-You understand Hindi, English, and Hinglish.
-Reply in the same style as the user.
+You understand Hindi, English and Hinglish.
+Reply in the same language style as the user.
 
 Speak naturally like ChatGPT.
 """
@@ -59,7 +59,7 @@ padding:15px;
 .msg{
 margin:10px 0;
 padding:10px 14px;
-border-radius:10px;
+border-radius:12px;
 max-width:70%;
 }
 
@@ -106,7 +106,7 @@ cursor:pointer;
 <div id="chat"></div>
 
 <div id="input">
-<input id="text" placeholder="Type message">
+<input id="text" placeholder="Ask anything...">
 <button onclick="send()">Send</button>
 <button onclick="mic()">🎤</button>
 </div>
@@ -148,9 +148,13 @@ add(data.reply,"ai")
 
 if(data.audio){
 
-let audio=new Audio("data:audio/mp3;base64,"+data.audio)
+let audio=new Audio()
 
-audio.play().catch(e=>console.log(e))
+audio.src="data:audio/mp3;base64,"+data.audio
+
+audio.play().catch(e=>{
+console.log("Audio error:",e)
+})
 
 }
 
@@ -188,6 +192,16 @@ send()
 </html>
 """
 
+
+def detect_lang(text):
+
+    hindi="अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह"
+
+    score=sum(1 for c in text if c in hindi)
+
+    return "hi" if score>2 else "en"
+
+
 async def generate_voice(text,lang):
 
     voice="hi-IN-SwaraNeural" if lang=="hi" else "en-US-JennyNeural"
@@ -202,24 +216,26 @@ async def generate_voice(text,lang):
 
             audio+=chunk["data"]
 
-    return base64.b64encode(audio).decode()
+    return audio
 
 
 def run_tts(text,lang):
 
     try:
-        return asyncio.run(generate_voice(text,lang))
-    except:
+
+        loop=asyncio.new_event_loop()
+
+        asyncio.set_event_loop(loop)
+
+        audio_bytes=loop.run_until_complete(generate_voice(text,lang))
+
+        return base64.b64encode(audio_bytes).decode()
+
+    except Exception as e:
+
+        print("TTS ERROR:",e)
+
         return None
-
-
-def detect_lang(text):
-
-    hindi="अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह"
-
-    score=sum(1 for c in text if c in hindi)
-
-    return "hi" if score>2 else "en"
 
 
 @app.route("/")
@@ -245,8 +261,8 @@ def chat():
 
         messages=[{"role":"system","content":SYSTEM}]+history,
 
-        max_tokens=400,
-        temperature=0.7
+        temperature=0.7,
+        max_tokens=400
     )
 
     reply=resp.choices[0].message.content
