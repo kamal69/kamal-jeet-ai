@@ -1,6 +1,10 @@
 import os
 import base64
 import asyncio
+import urllib.request
+import urllib.parse
+import re
+
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 from groq import Groq
@@ -12,17 +16,22 @@ app = Flask(__name__)
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-history = []
+history=[]
 
-SYSTEM = """
+SYSTEM="""
 You are KJ Master AI.
 
-You understand Hindi, English and Hinglish.
-Reply in the same language style as the user.
-Speak naturally like ChatGPT.
+Understand Hindi, English and Hinglish.
+
+If user asks for image reply exactly:
+[IMAGE:object]
+
+Example:
+User: show lion
+Reply: [IMAGE:lion]
 """
 
-HTML = """
+HTML="""
 <!DOCTYPE html>
 <html>
 <head>
@@ -97,6 +106,12 @@ color:white;
 cursor:pointer;
 }
 
+img{
+max-width:250px;
+border-radius:10px;
+margin-top:5px;
+}
+
 </style>
 
 </head>
@@ -136,7 +151,6 @@ audioUnlocked=true
 }
 
 document.addEventListener("click",unlockAudio)
-document.addEventListener("touchstart",unlockAudio)
 
 function add(text,cls){
 
@@ -176,9 +190,19 @@ body:JSON.stringify({message:msg})
 
 let data=await res.json()
 
-add(data.reply,"ai")
+if(data.type=="image"){
 
-console.log("Audio length:",data.audio?.length)
+let img=document.createElement("img")
+
+img.src=data.image_url
+
+document.getElementById("chat").appendChild(img)
+
+return
+
+}
+
+add(data.reply,"ai")
 
 if(data.audio){
 
@@ -186,13 +210,7 @@ let audio=new Audio()
 
 audio.src="data:audio/mp3;base64,"+data.audio
 
-audio.autoplay=true
-
-audio.play().catch(e=>{
-
-console.log("Audio error:",e)
-
-})
+audio.play().catch(e=>console.log("audio blocked",e))
 
 }
 
@@ -204,7 +222,7 @@ let SR=window.SpeechRecognition||window.webkitSpeechRecognition
 
 if(!SR){
 
-alert("Use Chrome browser")
+alert("Use Chrome")
 
 return
 
@@ -243,7 +261,6 @@ def detect_lang(text):
 
     return "hi" if score>2 else "en"
 
-
 async def generate_voice(text,lang):
 
     voice="hi-IN-SwaraNeural" if lang=="hi" else "en-US-JennyNeural"
@@ -259,7 +276,6 @@ async def generate_voice(text,lang):
             audio+=chunk["data"]
 
     return audio
-
 
 def run_tts(text,lang):
 
@@ -279,12 +295,30 @@ def run_tts(text,lang):
 
         return None
 
+def fetch_image(query):
+
+    try:
+
+        url="https://source.unsplash.com/600x400/?"+urllib.parse.quote(query)
+
+        with urllib.request.urlopen(url) as r:
+
+            raw=r.read()
+
+            img=base64.b64encode(raw).decode()
+
+            return "data:image/jpeg;base64,"+img
+
+    except Exception as e:
+
+        print("image error",e)
+
+        return None
 
 @app.route("/")
 def home():
 
     return render_template_string(HTML)
-
 
 @app.route("/chat",methods=["POST"])
 def chat():
@@ -303,18 +337,30 @@ def chat():
 
         messages=[{"role":"system","content":SYSTEM}]+history,
 
-        temperature=0.7,
-        max_tokens=400
+        max_tokens=400,
+        temperature=0.7
+
     )
 
-    reply=resp.choices[0].message.content
+    reply=resp.choices[0].message.content.strip()
 
     history.append({"role":"assistant","content":reply})
 
-    if len(history)>20:
+    img_match=re.match(r'^\\[IMAGE:(.*?)\\]$',reply)
 
-        history.pop(0)
-        history.pop(0)
+    if img_match:
+
+        query=img_match.group(1)
+
+        img=fetch_image(query)
+
+        return jsonify({
+
+            "type":"image",
+
+            "image_url":img
+
+        })
 
     audio=run_tts(reply,lang)
 
@@ -324,7 +370,6 @@ def chat():
         "audio":audio
 
     })
-
 
 if __name__=="__main__":
 
