@@ -1,9 +1,7 @@
 """
 =============================================================
     KAMAL JEET - AI AVATAR WEB APP
-    Version: 2.0 | Flask + Groq + Edge TTS
-    Run: python app.py
-    Then open: http://localhost:5000
+    Version: 3.0 | Flask + Groq + Edge TTS | Railway Ready
 =============================================================
 """
 
@@ -24,17 +22,12 @@ import edge_tts
 # =============================================================
 
 GROQ_API_KEY = "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"
-AI_MODEL     = "llama-3.3-70b-versatile"   # ✅ 70B model = ChatGPT-level natural replies
+AI_MODEL     = "llama-3.3-70b-versatile"
 
-# 🎙️ Natural-sounding voices
 TTS_VOICE_EN = "en-US-JennyNeural"
 TTS_VOICE_HI = "hi-IN-SwaraNeural"
 
 MAX_TOKENS   = 600
-
-# =============================================================
-#   SYSTEM PROMPT — Ultra Natural, Human-like
-# =============================================================
 
 SYSTEM_PROMPT = """Your name is Kamal Jeet. You talk exactly like a close, witty, intelligent friend — not like an AI assistant or a chatbot.
 
@@ -102,234 +95,74 @@ HTML = """<!DOCTYPE html>
 <title>Kamal Jeet — AI Assistant</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
-
   :root {
-    --bg:      #0D0F14;
-    --panel:   #13151C;
-    --input:   #1A1D27;
-    --user:    #1E3A5F;
-    --ai:      #1A1D27;
-    --accent:  #00D4FF;
-    --accent2: #7B61FF;
-    --text:    #E8EAF0;
-    --dim:     #6B7280;
-    --border:  #2A2D3A;
-    --green:   #10B981;
-    --red:     #EF4444;
+    --bg:#0D0F14; --panel:#13151C; --input:#1A1D27; --user:#1E3A5F;
+    --ai:#1A1D27; --accent:#00D4FF; --accent2:#7B61FF; --text:#E8EAF0;
+    --dim:#6B7280; --border:#2A2D3A; --green:#10B981; --red:#EF4444;
   }
-
   * { margin:0; padding:0; box-sizing:border-box; }
-
-  body {
-    font-family: 'JetBrains Mono', monospace;
-    background: var(--bg);
-    color: var(--text);
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  header {
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-  }
-
-  .logo { display: flex; align-items: center; gap: 10px; }
-  .dot  { width:10px; height:10px; border-radius:50%; background:var(--accent); animation: pulse 2s infinite; }
-
-  @keyframes pulse {
-    0%,100% { opacity:1; }
-    50%      { opacity:0.4; }
-  }
-
-  .logo h1  { font-size:18px; color:var(--accent); letter-spacing:2px; }
-  .logo p   { font-size:9px;  color:var(--dim); margin-top:2px; }
-
+  body { font-family:'JetBrains Mono',monospace; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  header { background:var(--panel); border-bottom:1px solid var(--border); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .logo { display:flex; align-items:center; gap:10px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--accent); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .logo h1 { font-size:18px; color:var(--accent); letter-spacing:2px; }
+  .logo p  { font-size:9px; color:var(--dim); margin-top:2px; }
   .controls { display:flex; align-items:center; gap:12px; }
-
-  .toggle-btn {
-    background: var(--input);
-    border: 1px solid var(--border);
-    color: var(--dim);
-    padding: 6px 14px;
-    border-radius: 6px;
-    font-family: inherit;
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
+  .toggle-btn { background:var(--input); border:1px solid var(--border); color:var(--dim); padding:6px 14px; border-radius:6px; font-family:inherit; font-size:11px; cursor:pointer; transition:all 0.2s; }
   .toggle-btn.active { color:var(--accent); border-color:var(--accent); }
   .toggle-btn:hover  { background:var(--border); }
-
-  .clear-btn {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--dim);
-    padding: 6px 14px;
-    border-radius: 6px;
-    font-family: inherit;
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
+  .clear-btn { background:transparent; border:1px solid var(--border); color:var(--dim); padding:6px 14px; border-radius:6px; font-family:inherit; font-size:11px; cursor:pointer; transition:all 0.2s; }
   .clear-btn:hover { border-color:var(--red); color:var(--red); }
-
-  #chat {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    scroll-behavior: smooth;
-  }
-
-  #chat::-webkit-scrollbar       { width:4px; }
+  #chat { flex:1; overflow-y:auto; padding:20px; scroll-behavior:smooth; }
+  #chat::-webkit-scrollbar { width:4px; }
   #chat::-webkit-scrollbar-track { background:var(--bg); }
   #chat::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
-
-  .msg-wrap { margin-bottom: 18px; display:flex; flex-direction:column; }
-  .msg-wrap.user  { align-items: flex-end; }
-  .msg-wrap.ai    { align-items: flex-start; }
-  .msg-wrap.system{ align-items: center; }
-
-  .meta {
-    font-size: 9px;
-    color: var(--dim);
-    margin-bottom: 4px;
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .msg-wrap.user .meta  { flex-direction:row-reverse; }
-  .meta .name           { font-weight:700; }
+  .msg-wrap { margin-bottom:18px; display:flex; flex-direction:column; }
+  .msg-wrap.user   { align-items:flex-end; }
+  .msg-wrap.ai     { align-items:flex-start; }
+  .msg-wrap.system { align-items:center; }
+  .meta { font-size:9px; color:var(--dim); margin-bottom:4px; display:flex; gap:8px; align-items:center; }
+  .msg-wrap.user .meta { flex-direction:row-reverse; }
+  .meta .name { font-weight:700; }
   .meta .name.user-name { color:var(--accent); }
   .meta .name.ai-name   { color:var(--accent2); }
-
-  .bubble {
-    max-width: 70%;
-    padding: 12px 16px;
-    border-radius: 10px;
-    font-size: 13px;
-    line-height: 1.7;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
+  .bubble { max-width:70%; padding:12px 16px; border-radius:10px; font-size:13px; line-height:1.7; white-space:pre-wrap; word-break:break-word; }
   .bubble.user   { background:var(--user); color:#93C5FD; }
-  .bubble.ai     { background:var(--ai);   color:#C4B5FD; border:1px solid var(--border); }
+  .bubble.ai     { background:var(--ai); color:#C4B5FD; border:1px solid var(--border); }
   .bubble.system { background:transparent; color:var(--dim); font-size:11px; text-align:center; }
-
-  .bubble img {
-    max-width: 100%;
-    border-radius: 8px;
-    display: block;
-    margin-bottom: 6px;
-  }
-
-  .img-caption { font-size:10px; color:var(--dim); margin-top:4px; }
-
-  .typing-dots span {
-    display:inline-block;
-    width:6px; height:6px;
-    background:var(--accent2);
-    border-radius:50%;
-    margin:0 2px;
-    animation: bounce 1.2s infinite;
-  }
+  .bubble img    { max-width:100%; border-radius:8px; display:block; margin-bottom:6px; }
+  .img-caption   { font-size:10px; color:var(--dim); margin-top:4px; }
+  .typing-dots span { display:inline-block; width:6px; height:6px; background:var(--accent2); border-radius:50%; margin:0 2px; animation:bounce 1.2s infinite; }
   .typing-dots span:nth-child(2) { animation-delay:0.2s; }
   .typing-dots span:nth-child(3) { animation-delay:0.4s; }
-  @keyframes bounce {
-    0%,80%,100% { transform:translateY(0); }
-    40%          { transform:translateY(-6px); }
-  }
-
-  .input-area {
-    background: var(--panel);
-    border-top: 1px solid var(--border);
-    padding: 14px 20px;
-    flex-shrink: 0;
-  }
-
-  .input-row {
-    display: flex;
-    gap: 10px;
-    align-items: flex-end;
-  }
-
-  #userInput {
-    flex: 1;
-    background: var(--input);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: inherit;
-    font-size: 13px;
-    padding: 12px 16px;
-    border-radius: 8px;
-    resize: none;
-    outline: none;
-    min-height: 46px;
-    max-height: 120px;
-    transition: border-color 0.2s;
-  }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+  .input-area { background:var(--panel); border-top:1px solid var(--border); padding:14px 20px; flex-shrink:0; }
+  .input-row  { display:flex; gap:10px; align-items:flex-end; }
+  #userInput  { flex:1; background:var(--input); border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:13px; padding:12px 16px; border-radius:8px; resize:none; outline:none; min-height:46px; max-height:120px; transition:border-color 0.2s; }
   #userInput:focus { border-color:var(--accent); }
-
-  #sendBtn {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    padding: 12px 22px;
-    border-radius: 8px;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
+  #sendBtn { background:var(--accent); color:var(--bg); border:none; padding:12px 22px; border-radius:8px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; white-space:nowrap; }
   #sendBtn:hover    { background:var(--accent2); color:white; }
   #sendBtn:disabled { opacity:0.5; cursor:not-allowed; }
-
   .hint { font-size:9px; color:var(--dim); text-align:center; margin-top:8px; }
-
-  .status-bar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 9px;
-    color: var(--dim);
-    margin-bottom: 6px;
-  }
+  .status-bar { display:flex; align-items:center; gap:6px; font-size:9px; color:var(--dim); margin-bottom:6px; }
   .status-dot { width:6px; height:6px; border-radius:50%; background:var(--green); }
   .status-dot.busy { background:var(--red); animation:pulse 1s infinite; }
-
-  @media (max-width: 600px) {
-    .bubble { max-width:90%; font-size:12px; }
-    header  { padding:10px 14px; }
-    .logo h1{ font-size:15px; }
-  }
+  @media (max-width:600px) { .bubble{max-width:90%;font-size:12px;} header{padding:10px 14px;} .logo h1{font-size:15px;} }
 </style>
 </head>
 <body>
-
 <header>
   <div class="logo">
     <div class="dot"></div>
-    <div>
-      <h1>KAMAL JEET</h1>
-      <p>AI Avatar Assistant &nbsp;•&nbsp; KJ Master AI⚡</p>
-    </div>
+    <div><h1>KAMAL JEET</h1><p>AI Avatar Assistant &nbsp;•&nbsp; KJ Master AI⚡</p></div>
   </div>
   <div class="controls">
     <button class="toggle-btn active" id="voiceBtn" onclick="toggleVoice()">🔊 Voice ON</button>
     <button class="clear-btn" onclick="clearChat()">Clear</button>
   </div>
 </header>
-
 <div id="chat"></div>
-
 <div class="input-area">
   <div class="status-bar">
     <div class="status-dot" id="statusDot"></div>
@@ -340,96 +173,77 @@ HTML = """<!DOCTYPE html>
               onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
     <button id="sendBtn" onclick="sendMessage()">Send ➤</button>
   </div>
-  <div class="hint">Enter to send &nbsp;•&nbsp; Shift+Enter for new line &nbsp;•&nbsp; Supports Hindi / Hinglish / English</div>
+  <div class="hint">Enter to send &nbsp;•&nbsp; Shift+Enter for new line &nbsp;•&nbsp; Hindi / Hinglish / English</div>
 </div>
-
 <script>
   let voiceEnabled = true;
-
   function toggleVoice() {
     voiceEnabled = !voiceEnabled;
     const btn = document.getElementById('voiceBtn');
     btn.textContent = voiceEnabled ? '🔊 Voice ON' : '🔇 Voice OFF';
     btn.classList.toggle('active', voiceEnabled);
   }
-
   function setStatus(text, busy=false) {
     document.getElementById('statusText').textContent = text;
     document.getElementById('statusDot').className = 'status-dot' + (busy ? ' busy' : '');
   }
-
   function getTime() {
     return new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
   }
-
   function addMessage(content, sender, isImage=false, imageUrl=null, caption=null) {
     const chat = document.getElementById('chat');
     const wrap = document.createElement('div');
     wrap.className = 'msg-wrap ' + sender;
-
     let metaHtml = '';
     if (sender !== 'system') {
-      const name     = sender === 'user' ? 'You' : 'Kamal Jeet';
-      const nameClass= sender === 'user' ? 'user-name' : 'ai-name';
-      metaHtml = `<div class="meta"><span class="name ${nameClass}">${name}</span><span>${getTime()}</span></div>`;
+      const name      = sender === 'user' ? 'You' : 'Kamal Jeet';
+      const nameClass = sender === 'user' ? 'user-name' : 'ai-name';
+      metaHtml = '<div class="meta"><span class="name ' + nameClass + '">' + name + '</span><span>' + getTime() + '</span></div>';
     }
-
     let bubbleContent = '';
     if (isImage && imageUrl) {
-      bubbleContent = `<img src="${imageUrl}" alt="${caption}" loading="lazy"><div class="img-caption">"${caption}"</div>`;
+      bubbleContent = '<img src="' + imageUrl + '" alt="' + caption + '" loading="lazy"><div class="img-caption">"' + caption + '"</div>';
     } else {
       bubbleContent = escapeHtml(content);
     }
-
-    wrap.innerHTML = metaHtml + `<div class="bubble ${sender}">${bubbleContent}</div>`;
+    wrap.innerHTML = metaHtml + '<div class="bubble ' + sender + '">' + bubbleContent + '</div>';
     chat.appendChild(wrap);
     chat.scrollTop = chat.scrollHeight;
     return wrap;
   }
-
   function addTyping() {
     const chat = document.getElementById('chat');
     const wrap = document.createElement('div');
     wrap.className = 'msg-wrap ai';
     wrap.id = 'typing';
-    wrap.innerHTML = `
-      <div class="meta"><span class="name ai-name">Kamal Jeet</span></div>
-      <div class="bubble ai"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+    wrap.innerHTML = '<div class="meta"><span class="name ai-name">Kamal Jeet</span></div><div class="bubble ai"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
     chat.appendChild(wrap);
     chat.scrollTop = chat.scrollHeight;
   }
-
   function removeTyping() {
     const t = document.getElementById('typing');
     if (t) t.remove();
   }
-
   function escapeHtml(text) {
     return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
-
   function handleKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
-
   function autoResize(el) {
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   }
-
   async function sendMessage() {
     const input = document.getElementById('userInput');
     const text  = input.value.trim();
     if (!text) return;
-
     input.value = '';
     input.style.height = 'auto';
     document.getElementById('sendBtn').disabled = true;
     setStatus('Processing...', true);
-
     addMessage(text, 'user');
     addTyping();
-
     try {
       const res  = await fetch('/chat', {
         method: 'POST',
@@ -438,7 +252,6 @@ HTML = """<!DOCTYPE html>
       });
       const data = await res.json();
       removeTyping();
-
       if (data.type === 'image') {
         addMessage('', 'ai', true, data.image_url, data.caption);
       } else {
@@ -454,19 +267,15 @@ HTML = """<!DOCTYPE html>
       addMessage('Error: Could not connect. Please try again.', 'ai');
       setStatus('Error', true);
     }
-
     document.getElementById('sendBtn').disabled = false;
     document.getElementById('userInput').focus();
   }
-
   function clearChat() {
     fetch('/clear', {method:'POST'});
     document.getElementById('chat').innerHTML = '';
     addMessage('Chat clear ho gaya. Naya conversation shuru karo!', 'system');
   }
-
-  // Welcome message
-  addMessage('Arre yaar, aa gaye! Main Kamal Jeet hoon — tera AI dost.\\nHindi mein baat kar, Hinglish mein, ya English mein — main khud samajh jaunga aur usi mein jawab dunga. 🎙️', 'system');
+  addMessage('Arre yaar, aa gaye! Main Kamal Jeet hoon — tera AI dost.\nHindi mein baat kar, Hinglish mein, ya English mein — main khud samajh jaunga. \uD83C\uDF99\uFE0F', 'system');
   document.getElementById('userInput').focus();
 </script>
 </body>
@@ -477,7 +286,6 @@ HTML = """<!DOCTYPE html>
 # =============================================================
 
 def detect_language(text: str) -> str:
-    """Detect if text is Hindi (Devanagari), Hinglish, or English."""
     hindi_chars = set('अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसहक्षत्रज्ञांःी')
     hindi_count = sum(1 for c in text if c in hindi_chars)
     if hindi_count > 2:
@@ -498,15 +306,14 @@ def clean_text(text: str) -> str:
     text = re.sub(r'\*(.*?)\*',     r'\1', text)
     text = re.sub(r'`(.*?)`',       r'\1', text)
     text = re.sub(r'#{1,6}\s',      '',    text)
-    text = re.sub(r'^\s*[-*]\s', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*[-*]\s',    '',    text, flags=re.MULTILINE)
     return text.strip()
 
 
-def fetch_image_base64(query: str) -> str | None:
-    """Fetch image and return as base64 string."""
+def fetch_image_base64(query: str):
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     try:
-        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(query.replace(' ', '_'))}"
+        url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(query.replace(' ', '_'))
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=8) as r:
             data    = json.loads(r.read())
@@ -516,9 +323,8 @@ def fetch_image_base64(query: str) -> str | None:
                 return "data:image/jpeg;base64," + base64.b64encode(r.read()).decode()
     except Exception:
         pass
-
     try:
-        url  = f"https://www.bing.com/images/search?q={urllib.parse.quote(query)}"
+        url  = "https://www.bing.com/images/search?q=" + urllib.parse.quote(query)
         req  = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=8) as r:
             html = r.read().decode("utf-8")
@@ -531,23 +337,20 @@ def fetch_image_base64(query: str) -> str | None:
     return None
 
 
-async def generate_voice_async(text: str, lang: str = "en") -> str | None:
-    """Generate voice and return base64 audio."""
+async def generate_voice_async(text: str, lang: str = "en"):
     try:
-        # Pick voice based on detected language
         if lang == "hi":
             voice = "hi-IN-SwaraNeural"
             rate  = "-8%"
             pitch = "+2Hz"
         elif lang == "hinglish":
-            voice = "en-IN-NeerjaNeural"   # Indian English = perfect for Hinglish
+            voice = "en-IN-NeerjaNeural"
             rate  = "-5%"
             pitch = "+0Hz"
         else:
             voice = "en-US-JennyNeural"
             rate  = "-5%"
             pitch = "+0Hz"
-
         buf = BytesIO()
         communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
         async for chunk in communicate.stream():
@@ -573,16 +376,16 @@ def chat():
     user_message = data.get("message", "")
     want_voice   = data.get("voice", True)
 
-    # Detect user language and inject as instruction so model CANNOT ignore it
     user_lang = detect_language(user_message)
     lang_instruction = {
-        "hi":       "[STRICT: User wrote in Hindi. You MUST reply ONLY in Hindi (Devanagari script). No English words at all.]",
-        "hinglish": "[STRICT: User wrote in Hinglish. You MUST reply ONLY in Hinglish (Roman script Hindi). No Devanagari.]",
-        "en":       "[STRICT: User wrote in English. You MUST reply ONLY in English. No Hindi words at all.]"
+        "hi":       "[STRICT: User wrote in Hindi. Reply ONLY in Hindi Devanagari script.]",
+        "hinglish": "[STRICT: User wrote in Hinglish. Reply ONLY in Hinglish Roman script.]",
+        "en":       "[STRICT: User wrote in English. Reply ONLY in English. No Hindi at all.]"
     }[user_lang]
-    
+
     forced_message = lang_instruction + "\n\nUser: " + user_message
     chat_history.append({"role": "user", "content": forced_message})
+
     try:
         response = client.chat.completions.create(
             model=AI_MODEL,
@@ -593,11 +396,11 @@ def chat():
         reply = response.choices[0].message.content
         chat_history.append({"role": "assistant", "content": reply})
         if len(chat_history) > 20:
-            chat_history.pop(0); chat_history.pop(0)
+            chat_history.pop(0)
+            chat_history.pop(0)
     except Exception as e:
-        return jsonify({"type": "text", "reply": f"Yaar kuch error aa gaya: {str(e)}"})
+        return jsonify({"type": "text", "reply": "Yaar kuch error aa gaya: " + str(e)})
 
-    # Check if image request
     image_match = re.match(r'^\[IMAGE:(.*?)\]$', reply.strip())
     if image_match:
         query     = image_match.group(1)
@@ -606,8 +409,6 @@ def chat():
 
     reply = clean_text(reply)
 
-    # Detect language from USER message for correct TTS voice selection
-    user_lang = detect_language(user_message)
     audio_b64 = None
     if want_voice:
         audio_b64 = asyncio.run(generate_voice_async(reply, user_lang))
@@ -622,10 +423,12 @@ def clear():
 
 
 # =============================================================
+#   ✅ RAILWAY FIX — Dynamic PORT (most important!)
+# =============================================================
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))   # Railway sets PORT automatically
     print("=" * 50)
-    print("  Kamal Jeet AI v2.0 — Natural Voice Edition!")
-    print("  Open in browser: http://localhost:5000")
-    print("  Press Ctrl+C to stop")
+    print("  Kamal Jeet AI v3.0 — Railway Ready!")
+    print("  Port:", port)
     print("=" * 50)
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)
