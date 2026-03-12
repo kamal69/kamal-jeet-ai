@@ -1,9 +1,6 @@
 import os
-import re
-import json
 import base64
 import asyncio
-from io import BytesIO
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 from groq import Groq
@@ -18,19 +15,10 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 history = []
 
 SYSTEM = """
-You are KJ Master AI — a warm and intelligent AI assistant.
+You are KJ Master AI.
 
-IDENTITY:
-You were built by Kamal Jeet from Himachal Pradesh.
-
-LANGUAGE RULE:
 You understand Hindi, English, and Hinglish.
-
-Reply in the same language style the user uses.
-
-Hindi → Hindi  
-English → English  
-Hinglish → Hinglish  
+Reply in the same style as the user.
 
 Speak naturally like ChatGPT.
 """
@@ -55,8 +43,8 @@ margin:0;
 }
 
 header{
-padding:15px;
 background:#1e293b;
+padding:15px;
 text-align:center;
 font-size:20px;
 font-weight:bold;
@@ -70,9 +58,9 @@ padding:15px;
 
 .msg{
 margin:10px 0;
-max-width:70%;
 padding:10px 14px;
-border-radius:12px;
+border-radius:10px;
+max-width:70%;
 }
 
 .user{
@@ -99,10 +87,10 @@ outline:none;
 }
 
 button{
-margin-left:8px;
+margin-left:6px;
+padding:10px;
 border:none;
 border-radius:10px;
-padding:10px 14px;
 background:#6366f1;
 color:white;
 cursor:pointer;
@@ -118,14 +106,12 @@ cursor:pointer;
 <div id="chat"></div>
 
 <div id="input">
-<input id="text" placeholder="Ask anything...">
+<input id="text" placeholder="Type message">
 <button onclick="send()">Send</button>
 <button onclick="mic()">🎤</button>
 </div>
 
 <script>
-
-let recognition;
 
 function add(text,cls){
 
@@ -163,7 +149,8 @@ add(data.reply,"ai")
 if(data.audio){
 
 let audio=new Audio("data:audio/mp3;base64,"+data.audio)
-audio.play()
+
+audio.play().catch(e=>console.log(e))
 
 }
 
@@ -174,23 +161,24 @@ function mic(){
 let SR=window.SpeechRecognition||window.webkitSpeechRecognition
 
 if(!SR){
-alert("Use Chrome for mic")
+alert("Use Chrome browser")
 return
 }
 
-recognition=new SR()
+let recognition=new SR()
 
-recognition.lang="hi-IN"
+recognition.lang="en-IN"
+recognition.start()
 
 recognition.onresult=function(e){
 
-document.getElementById("text").value=e.results[0][0].transcript
+let text=e.results[0][0].transcript
+
+document.getElementById("text").value=text
 
 send()
 
 }
-
-recognition.start()
 
 }
 
@@ -199,14 +187,6 @@ recognition.start()
 </body>
 </html>
 """
-
-def detect_lang(text):
-
-    hindi_chars = set("अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह")
-
-    score=sum(1 for c in text if c in hindi_chars)
-
-    return "hi" if score>2 else "en"
 
 async def generate_voice(text,lang):
 
@@ -224,20 +204,29 @@ async def generate_voice(text,lang):
 
     return base64.b64encode(audio).decode()
 
+
 def run_tts(text,lang):
 
     try:
-
         return asyncio.run(generate_voice(text,lang))
-
     except:
-
         return None
+
+
+def detect_lang(text):
+
+    hindi="अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह"
+
+    score=sum(1 for c in text if c in hindi)
+
+    return "hi" if score>2 else "en"
+
 
 @app.route("/")
 def home():
 
     return render_template_string(HTML)
+
 
 @app.route("/chat",methods=["POST"])
 def chat():
@@ -256,8 +245,8 @@ def chat():
 
         messages=[{"role":"system","content":SYSTEM}]+history,
 
-        temperature=0.7,
-        max_tokens=400
+        max_tokens=400,
+        temperature=0.7
     )
 
     reply=resp.choices[0].message.content
@@ -274,6 +263,7 @@ def chat():
         "reply":reply,
         "audio":audio
     })
+
 
 if __name__=="__main__":
 
