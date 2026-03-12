@@ -1,7 +1,7 @@
 """
 =============================================================
     KAMAL JEET - AI AVATAR WEB APP
-    Version: 1.0 | Flask + Groq + Edge TTS
+    Version: 2.0 | Flask + Groq + Edge TTS
     Run: python app.py
     Then open: http://localhost:5000
 =============================================================
@@ -23,30 +23,64 @@ import edge_tts
 #                     CONFIGURATION
 # =============================================================
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
-AI_MODEL     = "llama-3.1-8b-instant"
-TTS_VOICE_EN = "en-US-AriaNeural"
-TTS_VOICE_HI = "hi-IN-MadhurNeural"
-MAX_TOKENS   = 500
+GROQ_API_KEY = "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"
+AI_MODEL     = "llama-3.3-70b-versatile"   # ✅ 70B model = ChatGPT-level natural replies
 
-SYSTEM_PROMPT = """You are a professional bilingual AI assistant named Kamal Jeet.
+# 🎙️ Natural-sounding voices
+TTS_VOICE_EN = "en-US-JennyNeural"
+TTS_VOICE_HI = "hi-IN-SwaraNeural"
 
-Language Rules:
-- If the user writes in pure/shuddh Hindi (Devanagari script), reply in pure shuddh Hindi only.
-- If the user writes in Hinglish (Roman script Hindi), reply in Hinglish only.
-- If the user writes in English, reply in professional English only.
-- Never mix styles.
+MAX_TOKENS   = 600
 
-Formatting Rules:
-- NEVER use markdown like **bold**, *italic*, bullet points, or backticks.
-- Write in plain simple conversational text only.
+# =============================================================
+#   SYSTEM PROMPT — Ultra Natural, Human-like
+# =============================================================
 
-Image Rules:
-- Whenever user asks for ANY image, photo, picture, show me, dikhao — ALWAYS reply ONLY with: [IMAGE:search_term]
-- Examples: "show me apple" → [IMAGE:apple fruit] | "Taj Mahal dikhao" → [IMAGE:Taj Mahal India]
-- NEVER say you cannot show images. ALWAYS use [IMAGE:] tag.
+SYSTEM_PROMPT = """Your name is Kamal Jeet. You talk exactly like a close, witty, intelligent friend — not like an AI assistant or a chatbot.
 
-Always be concise, helpful, and professional."""
+LANGUAGE RULE (most important):
+Detect the user's language from their message and reply in that exact same language and style:
+- Pure Hindi (Devanagari script) → reply in natural flowing Hindi, like a real person speaks
+- Hinglish (Hindi words written in English letters) → reply in Hinglish, casual and friendly
+- English → reply in natural conversational English, like texting a smart friend
+Never mix. Never switch. Stay in their language throughout.
+
+HOW TO SOUND HUMAN — follow these strictly:
+1. Start replies naturally. Never start with "Of course!", "Certainly!", "Great question!", "Sure!" or any AI filler. Just start talking.
+2. Use contractions and informal words. In English: "it's", "you're", "gonna", "kinda", "tbh", "ngl". In Hinglish: "yaar", "bhai", "matlab", "seedha baat", "suno", "dekho", "waise".
+3. Keep sentences short. Real humans don't write paragraphs. Break your thoughts into short, punchy lines.
+4. Show personality. Make light jokes when appropriate. Say "lol" or "haha" if something is funny. React genuinely.
+5. Don't over-explain. Answer what was asked. Stop. Don't pad it with extra info nobody asked for.
+6. Ask one natural follow-up if relevant — like a real friend would.
+7. Never say "I'm an AI" or "As an AI language model" or anything robotic. You're Kamal Jeet.
+
+STRICT FORMATTING:
+- No markdown at all. No **bold**, no *italic*, no bullet points, no numbered lists, no headers, no backticks.
+- If you need to list things, write them inline: "basically there are three things — first this, then that, and also this."
+- Plain text only, always.
+
+IMAGE RULE:
+When user asks to see any image, photo, or says "dikhao", "show me", "picture bhejo" → respond with ONLY this exact format: [IMAGE:descriptive search term]
+Example: "Taj Mahal dikhao" → [IMAGE:Taj Mahal Agra India]
+Never say you can't show images. Always use [IMAGE:] format.
+
+---
+Here are examples of how you should talk. Study these carefully:
+
+User (Hinglish): "bhai Python kya hota hai"
+You: "Python ek programming language hai yaar — bahut simple aur powerful. isko likhna almost English jaisa lagta hai, isliye beginners ke liye best hai. websites, AI, automation, data science — sab mein use hoti hai. tu sikhna chahta hai kya?"
+
+User (English): "what's the meaning of life"
+You: "honestly? nobody fully knows lol. philosophers have been arguing about this forever. but most people land on something like — find things that matter to you, connect with people, do work that feels meaningful. what's making you ask this?"
+
+User (Hindi): "मुझे नींद नहीं आ रही"
+You: "अरे यार यह तो बड़ी परेशानी है। रात को बहुत देर तक फोन देखते हो क्या? या दिमाग में कुछ चल रहा है? वजह पता हो तो बताओ, कुछ तरीके बताता हूं जो सच में काम करते हैं।"
+
+User (Hinglish): "aaj bahut bura din tha"
+You: "yaar kya hua? bata, main sun raha hoon."
+---
+
+Be Kamal Jeet. Sound real. Sound human."""
 
 # =============================================================
 #                     FLASK APP
@@ -285,7 +319,7 @@ HTML = """<!DOCTYPE html>
     <div class="dot"></div>
     <div>
       <h1>KAMAL JEET</h1>
-      <p>AI Avatar Assistant &nbsp;•&nbsp; Groq Powered ⚡</p>
+      <p>AI Avatar Assistant &nbsp;•&nbsp; KJ Master AI⚡</p>
     </div>
   </div>
   <div class="controls">
@@ -428,10 +462,11 @@ HTML = """<!DOCTYPE html>
   function clearChat() {
     fetch('/clear', {method:'POST'});
     document.getElementById('chat').innerHTML = '';
-    addMessage('Chat cleared. Start a new conversation!', 'system');
+    addMessage('Chat clear ho gaya. Naya conversation shuru karo!', 'system');
   }
 
-  addMessage('Welcome! I am Kamal Jeet — your AI assistant.\\nChat in English, Hindi (हिंदी), or Hinglish. I will match your language automatically. 🎙️', 'system');
+  // Welcome message
+  addMessage('Arre yaar, aa gaye! Main Kamal Jeet hoon — tera AI dost.\\nHindi mein baat kar, Hinglish mein, ya English mein — main khud samajh jaunga aur usi mein jawab dunga. 🎙️', 'system');
   document.getElementById('userInput').focus();
 </script>
 </body>
@@ -442,8 +477,20 @@ HTML = """<!DOCTYPE html>
 # =============================================================
 
 def detect_language(text: str) -> str:
-    hindi_chars = set('अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसहक्षत्रज्ञ')
-    return "hi" if any(c in hindi_chars for c in text) else "en"
+    """Detect if text is Hindi (Devanagari), Hinglish, or English."""
+    hindi_chars = set('अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसहक्षत्रज्ञांःी')
+    hindi_count = sum(1 for c in text if c in hindi_chars)
+    if hindi_count > 2:
+        return "hi"
+    hinglish_words = {"yaar","bhai","kya","hai","hoon","nahi","aur","mein","ki","ka","ko",
+                      "se","karo","karta","karti","tha","thi","ho","hoga","kuch","sab",
+                      "acha","theek","bahut","zyada","matlab","waise","seedha","bolo",
+                      "dekho","suno","bata","bol","kar","le","de","hua",
+                      "hui","aaj","kal","abhi","phir","toh","na","haan"}
+    words = set(text.lower().split())
+    if len(words & hinglish_words) >= 1:
+        return "hinglish"
+    return "en"
 
 
 def clean_text(text: str) -> str:
@@ -455,7 +502,8 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-def fetch_image_base64(query: str):
+def fetch_image_base64(query: str) -> str | None:
+    """Fetch image and return as base64 string."""
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     try:
         url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(query.replace(' ', '_'))}"
@@ -483,12 +531,25 @@ def fetch_image_base64(query: str):
     return None
 
 
-async def generate_voice_async(text: str):
+async def generate_voice_async(text: str, lang: str = "en") -> str | None:
+    """Generate voice and return base64 audio."""
     try:
-        lang  = detect_language(text)
-        voice = TTS_VOICE_HI if lang == "hi" else TTS_VOICE_EN
-        buf   = BytesIO()
-        communicate = edge_tts.Communicate(text, voice)
+        # Pick voice based on detected language
+        if lang == "hi":
+            voice = "hi-IN-SwaraNeural"
+            rate  = "-8%"
+            pitch = "+2Hz"
+        elif lang == "hinglish":
+            voice = "en-IN-NeerjaNeural"   # Indian English = perfect for Hinglish
+            rate  = "-5%"
+            pitch = "+0Hz"
+        else:
+            voice = "en-US-JennyNeural"
+            rate  = "-5%"
+            pitch = "+0Hz"
+
+        buf = BytesIO()
+        communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 buf.write(chunk["data"])
@@ -512,21 +573,31 @@ def chat():
     user_message = data.get("message", "")
     want_voice   = data.get("voice", True)
 
-    chat_history.append({"role": "user", "content": user_message})
+    # Detect user language and inject as instruction so model CANNOT ignore it
+    user_lang = detect_language(user_message)
+    lang_instruction = {
+        "hi":       "[STRICT: User wrote in Hindi. You MUST reply ONLY in Hindi (Devanagari script). No English words at all.]",
+        "hinglish": "[STRICT: User wrote in Hinglish. You MUST reply ONLY in Hinglish (Roman script Hindi). No Devanagari.]",
+        "en":       "[STRICT: User wrote in English. You MUST reply ONLY in English. No Hindi words at all.]"
+    }[user_lang]
+    
+    forced_message = lang_instruction + "\n\nUser: " + user_message
+    chat_history.append({"role": "user", "content": forced_message})
     try:
         response = client.chat.completions.create(
             model=AI_MODEL,
             messages=[{"role": "system", "content": SYSTEM_PROMPT}] + chat_history,
             max_tokens=MAX_TOKENS,
-            temperature=0.7
+            temperature=0.9
         )
         reply = response.choices[0].message.content
         chat_history.append({"role": "assistant", "content": reply})
         if len(chat_history) > 20:
             chat_history.pop(0); chat_history.pop(0)
     except Exception as e:
-        return jsonify({"type": "text", "reply": f"Error: {str(e)}"})
+        return jsonify({"type": "text", "reply": f"Yaar kuch error aa gaya: {str(e)}"})
 
+    # Check if image request
     image_match = re.match(r'^\[IMAGE:(.*?)\]$', reply.strip())
     if image_match:
         query     = image_match.group(1)
@@ -535,9 +606,11 @@ def chat():
 
     reply = clean_text(reply)
 
+    # Detect language from USER message for correct TTS voice selection
+    user_lang = detect_language(user_message)
     audio_b64 = None
     if want_voice:
-        audio_b64 = asyncio.run(generate_voice_async(reply))
+        audio_b64 = asyncio.run(generate_voice_async(reply, user_lang))
 
     return jsonify({"type": "text", "reply": reply, "audio": audio_b64})
 
@@ -550,10 +623,9 @@ def clear():
 
 # =============================================================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
     print("=" * 50)
-    print("  Kamal Jeet AI — Web App Started!")
-    print(f"  Open in browser: http://localhost:{port}")
+    print("  Kamal Jeet AI v2.0 — Natural Voice Edition!")
+    print("  Open in browser: http://localhost:5000")
     print("  Press Ctrl+C to stop")
     print("=" * 50)
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False)
