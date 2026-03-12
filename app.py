@@ -1,7 +1,8 @@
 """
 =============================================================
     KAMAL JEET - AI AVATAR WEB APP
-    Version: 3.0 | Flask + Groq + Edge TTS | Railway Ready
+    Version: 3.1 | Flask + Groq + Edge TTS | Railway Ready
+    FIXED: Audio autoplay + TTS error logging + asyncio fix
 =============================================================
 """
 
@@ -140,7 +141,6 @@ HTML = """<!DOCTYPE html>
     min-height: 100vh;
   }
 
-  /* PHONE WRAPPER — mobile: full screen, desktop: centered card */
   .phone {
     width: 100%;
     height: 100vh;
@@ -172,7 +172,6 @@ HTML = """<!DOCTYPE html>
     .bubble { font-size: 15px; }
   }
 
-  /* HEADER */
   .header {
     background: linear-gradient(135deg, #1a1a6e 0%, #3b2d8f 50%, #6c3fc5 100%);
     padding: 18px 20px 16px;
@@ -222,7 +221,6 @@ HTML = """<!DOCTYPE html>
   .icon-btn:hover { background:rgba(255,255,255,0.25); }
   .icon-btn.voice-off { background:rgba(239,68,68,0.3); }
 
-  /* CHAT AREA */
   #chat {
     flex: 1;
     overflow-y: auto;
@@ -235,7 +233,6 @@ HTML = """<!DOCTYPE html>
   #chat::-webkit-scrollbar { width:3px; }
   #chat::-webkit-scrollbar-thumb { background:#CBD5E1; border-radius:4px; }
 
-  /* DATE DIVIDER */
   .date-divider {
     text-align: center;
     color: var(--text-dim);
@@ -250,7 +247,6 @@ HTML = """<!DOCTYPE html>
     content:''; flex:1; height:1px; background:#D1D5DB;
   }
 
-  /* MESSAGE ROW */
   .msg-row {
     display: flex;
     align-items: flex-end;
@@ -264,7 +260,6 @@ HTML = """<!DOCTYPE html>
   .msg-row.user  { flex-direction:row-reverse; }
   .msg-row.system{ justify-content:center; }
 
-  /* AVATAR */
   .avatar {
     width:36px; height:36px;
     border-radius:50%;
@@ -279,7 +274,6 @@ HTML = """<!DOCTYPE html>
     font-size:15px;
   }
 
-  /* BUBBLE */
   .bubble-wrap { display:flex; flex-direction:column; max-width:72%; }
   .msg-row.user .bubble-wrap { align-items:flex-end; }
 
@@ -322,7 +316,6 @@ HTML = """<!DOCTYPE html>
   }
   .img-caption { font-size:11px; color:var(--text-dim); margin-top:4px; text-align:center; }
 
-  /* TIME */
   .msg-time {
     font-size: 10px;
     color: var(--text-dim);
@@ -331,7 +324,6 @@ HTML = """<!DOCTYPE html>
     font-weight: 600;
   }
 
-  /* TYPING */
   .typing-bubble {
     background:#fff;
     border-radius:4px 20px 20px 20px;
@@ -352,7 +344,6 @@ HTML = """<!DOCTYPE html>
     40%{transform:translateY(-6px);background:#6c3fc5;}
   }
 
-  /* INPUT AREA */
   .input-area {
     background: #ffffff;
     padding: 12px 14px 20px;
@@ -462,6 +453,83 @@ HTML = """<!DOCTYPE html>
 <script>
   let voiceEnabled = true;
 
+  // ✅ FIX: Audio context unlock karo — browser autoplay policy ke liye
+  // Pehle user interaction pe audio context resume hoga
+  let audioUnlocked = false;
+  let audioContext  = null;
+
+  function unlockAudio() {
+    if (audioUnlocked) return;
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      // Silent buffer play karo unlock ke liye
+      const buf    = audioContext.createBuffer(1, 1, 22050);
+      const source = audioContext.createBufferSource();
+      source.buffer = buf;
+      source.connect(audioContext.destination);
+      source.start(0);
+      audioUnlocked = true;
+    } catch(e) {
+      console.log('Audio unlock attempt:', e);
+    }
+  }
+
+  // Pehli user interaction pe unlock karo
+  document.addEventListener('click',     unlockAudio, { once: false });
+  document.addEventListener('touchstart', unlockAudio, { once: false });
+  document.addEventListener('keydown',   unlockAudio, { once: false });
+
+  // ✅ FIX: Reliable audio play function with retry + fallback
+  function playAudio(base64Data) {
+    return new Promise((resolve) => {
+      try {
+        unlockAudio(); // ensure unlocked
+
+        const audio = new Audio('data:audio/mp3;base64,' + base64Data);
+        audio.volume = 1.0;
+
+        audio.onended  = () => resolve(true);
+        audio.onerror  = (e) => {
+          console.error('Audio play error:', e);
+          resolve(false);
+        };
+
+        // play() returns a promise — handle it properly
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              // playing successfully
+            })
+            .catch((err) => {
+              console.warn('Autoplay blocked:', err);
+              // ✅ Fallback: AudioContext se decode karke play karo
+              if (audioContext) {
+                const raw = atob(base64Data);
+                const arr = new Uint8Array(raw.length);
+                for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+                audioContext.decodeAudioData(arr.buffer, (decodedData) => {
+                  const source = audioContext.createBufferSource();
+                  source.buffer = decodedData;
+                  source.connect(audioContext.destination);
+                  source.onended = () => resolve(true);
+                  source.start(0);
+                }, () => resolve(false));
+              } else {
+                resolve(false);
+              }
+            });
+        }
+      } catch(e) {
+        console.error('playAudio exception:', e);
+        resolve(false);
+      }
+    });
+  }
+
   function toggleVoice() {
     voiceEnabled = !voiceEnabled;
     const btn = document.getElementById('voiceBtn');
@@ -549,6 +617,8 @@ HTML = """<!DOCTYPE html>
     const text  = input.value.trim();
     if (!text) return;
 
+    unlockAudio(); // har message pe unlock try karo
+
     input.value = '';
     input.style.height = 'auto';
     document.getElementById('sendBtn').disabled = true;
@@ -570,8 +640,10 @@ HTML = """<!DOCTYPE html>
         addMessage('', 'ai', true, data.image_url, data.caption);
       } else {
         addMessage(data.reply, 'ai');
+        // ✅ FIX: Improved audio playback with proper error handling
         if (voiceEnabled && data.audio) {
-          new Audio('data:audio/mp3;base64,' + data.audio).play();
+          setStatus('Speaking...', true);
+          await playAudio(data.audio);
         }
       }
       setStatus('Ready to chat');
@@ -678,36 +750,63 @@ def fetch_image_base64(query: str):
     return None
 
 
+# ✅ FIX: Better asyncio handling for production
 async def generate_voice_async(text: str, lang: str = "en"):
     try:
         if lang == "hi":
-            voice = "hi-IN-SwaraNeural"      # Natural Hindi female
+            voice = "hi-IN-SwaraNeural"
             rate  = "-8%"
             pitch = "+2Hz"
         elif lang == "hinglish":
-            voice = "en-IN-NeerjaNeural"     # Indian English for Hinglish
+            voice = "en-IN-NeerjaNeural"
             rate  = "-5%"
             pitch = "+0Hz"
         elif lang == "bn":
-            voice = "bn-IN-TanishaaNeural"   # Bengali female
+            voice = "bn-IN-TanishaaNeural"
             rate  = "-5%"
             pitch = "+0Hz"
-        elif lang == "pa" or lang == "pa_roman":
-            voice = "en-IN-NeerjaNeural"     # Punjabi → use Indian English (no Punjabi TTS available)
+        elif lang in ("pa", "pa_roman"):
+            voice = "en-IN-NeerjaNeural"
             rate  = "-5%"
             pitch = "+0Hz"
         else:
-            voice = "en-US-JennyNeural"      # English
+            voice = "en-US-JennyNeural"
             rate  = "-5%"
             pitch = "+0Hz"
-    
+
         buf = BytesIO()
         communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 buf.write(chunk["data"])
-        return base64.b64encode(buf.getvalue()).decode()
-    except Exception:
+
+        audio_data = buf.getvalue()
+        if len(audio_data) == 0:
+            print("❌ TTS: Empty audio buffer — voice generation failed")
+            return None
+
+        print(f"✅ TTS: Generated {len(audio_data)} bytes for lang={lang}")
+        return base64.b64encode(audio_data).decode()
+
+    except Exception as e:
+        print(f"❌ TTS Error: {e}")
+        return None
+
+
+def run_tts(text: str, lang: str) -> str | None:
+    """✅ FIX: Safe asyncio runner — works on Railway + any OS"""
+    try:
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                raise RuntimeError("Loop closed")
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        return loop.run_until_complete(generate_voice_async(text, lang))
+    except Exception as e:
+        print(f"❌ TTS runner error: {e}")
         return None
 
 
@@ -767,13 +866,7 @@ def chat():
 
     audio_b64 = None
     if want_voice:
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            audio_b64 = loop.run_until_complete(generate_voice_async(reply, user_lang))
-            loop.close()
-        except Exception:
-            audio_b64 = None
+        audio_b64 = run_tts(reply, user_lang)  # ✅ Fixed TTS runner
 
     return jsonify({"type": "text", "reply": reply, "audio": audio_b64})
 
@@ -785,12 +878,12 @@ def clear():
 
 
 # =============================================================
-#   ✅ RAILWAY FIX — Dynamic PORT (most important!)
+#   ✅ RAILWAY FIX — Dynamic PORT
 # =============================================================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))   # Railway sets PORT automatically
+    port = int(os.environ.get("PORT", 5000))
     print("=" * 50)
-    print("  Kamal Jeet AI v3.0 — Railway Ready!")
+    print("  Kamal Jeet AI v3.1 — Railway Ready!")
     print("  Port:", port)
     print("=" * 50)
     app.run(host="0.0.0.0", port=port, debug=False)
