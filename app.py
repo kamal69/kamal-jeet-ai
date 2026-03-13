@@ -4,14 +4,19 @@ import urllib.request
 import urllib.parse
 import re
 import json
+import asyncio
+import tempfile
 
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 from groq import Groq
+try:
+    import edge_tts
+    EDGE_TTS_AVAILABLE = True
+except ImportError:
+    EDGE_TTS_AVAILABLE = False
 
 load_dotenv()
-
-GOOGLE_TTS_KEY = os.getenv("GOOGLE_TTS_KEY", "")
 
 app = Flask(__name__)
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -628,24 +633,13 @@ let msgCount = 0;
 // Unlock autoplay — Median/Android WebView compatible
 let audioUnlocked = false;
 let audioCtx = null;
-
 function unlockAudio(){
   if(audioUnlocked) return;
   audioUnlocked = true;
-  try{
-    let a = new Audio();
-    a.src = "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";
-    a.volume = 0;
-    a.play().catch(()=>{});
-  } catch(e){}
-  try{
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if(audioCtx.state === "suspended") audioCtx.resume();
-  } catch(e){}
+  try{ let a=new Audio(); a.src="data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA"; a.volume=0; a.play().catch(()=>{}); }catch(e){}
+  try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==="suspended") audioCtx.resume(); }catch(e){}
 }
-['click','touchstart','touchend','keydown'].forEach(ev=>{
-  document.addEventListener(ev, unlockAudio, {once:true});
-});
+['click','touchstart','touchend','keydown'].forEach(ev=>document.addEventListener(ev,unlockAudio,{once:true}));
 
 function setStatus(m){
   document.getElementById('status-pill').textContent = m;
@@ -860,61 +854,42 @@ async function send(){
   }
 }
 
-// ── Groq / Google TTS audio player (primary) ─────────────────────
+// ── Server Audio Player (Edge/Google/Groq TTS) ───────────────────
 function playGroqAudio(b64, fallbackText, onEnd){
   try{
     unlockAudio();
-    const binary = atob(b64);
-    const bytes  = new Uint8Array(binary.length);
+    const binary=atob(b64), bytes=new Uint8Array(binary.length);
     for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
-    const blob = new Blob([bytes], {type:'audio/mpeg'});
-    const url  = URL.createObjectURL(blob);
-    if(currentAudio){ currentAudio.pause(); currentAudio=null; }
-    const audio = new Audio(url);
-    currentAudio = audio;
+    const url=URL.createObjectURL(new Blob([bytes],{type:'audio/mpeg'}));
+    if(currentAudio){currentAudio.pause();currentAudio=null;}
+    const audio=new Audio(url);
+    currentAudio=audio;
     setStatus('🔊 Speaking…');
-    audio.onended = ()=>{ setStatus('Ready'); URL.revokeObjectURL(url); currentAudio=null; if(onEnd) onEnd(); };
-    audio.onerror = ()=>{ URL.revokeObjectURL(url); currentAudio=null; speakText(fallbackText, onEnd); };
-    setTimeout(()=>{ audio.play().catch(()=>{ speakText(fallbackText, onEnd); }); }, 80);
-  } catch(e){
-    speakText(fallbackText, onEnd);
-  }
+    audio.onended=()=>{setStatus('Ready');URL.revokeObjectURL(url);currentAudio=null;if(onEnd)onEnd();};
+    audio.onerror=()=>{URL.revokeObjectURL(url);currentAudio=null;speakText(fallbackText,onEnd);};
+    setTimeout(()=>audio.play().catch(()=>speakText(fallbackText,onEnd)),80);
+  }catch(e){speakText(fallbackText,onEnd);}
 }
 
-// ── Browser TTS (fallback only) ───────────────────────────────────
-const synth = window.speechSynthesis || null;
-
-function speakText(text, onEnd){
-  if(!synth){ if(onEnd) onEnd(); return; }
+// ── Browser TTS (last resort fallback) ───────────────────────────
+const synth=window.speechSynthesis||null;
+function speakText(text,onEnd){
+  if(!synth){if(onEnd)onEnd();return;}
   synth.cancel();
-  const clean = text
-    .replace(/```[\s\S]*?```/g, 'code block.')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/[#*_~]/g, '').trim();
-  if(!clean){ if(onEnd) onEnd(); return; }
-  const utter   = new SpeechSynthesisUtterance(clean);
-  const isHindi = /[\u0900-\u097F]/.test(clean);
-  const voices  = synth.getVoices();
-  let voice = null;
-  if(isHindi){
-    voice = voices.find(v => v.lang.startsWith('hi')) || null;
-  } else {
-    voice = voices.find(v => v.lang === 'en-IN')
-         || voices.find(v => v.lang.startsWith('en-IN'))
-         || voices.find(v => v.lang.startsWith('en')) || null;
-  }
-  if(voice) utter.voice = voice;
-  utter.lang = isHindi ? 'hi-IN' : 'en-IN';
-  utter.rate = 0.92; utter.pitch = 1.0; utter.volume = 1.0;
-  setStatus('🔊 Speaking… (browser)');
-  utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
-  utter.onerror= ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
+  const clean=text.replace(/```[\s\S]*?```/g,'code block.').replace(/\*\*(.*?)\*\*/g,'$1').replace(/`([^`]+)`/g,'$1').replace(/[#*_~]/g,'').trim();
+  if(!clean){if(onEnd)onEnd();return;}
+  const utter=new SpeechSynthesisUtterance(clean);
+  const isHindi=/[\u0900-\u097F]/.test(clean);
+  const voices=synth.getVoices();
+  let voice=isHindi ? voices.find(v=>v.lang.startsWith('hi')) : (voices.find(v=>v.lang==='en-IN')||voices.find(v=>v.lang.startsWith('en-IN'))||voices.find(v=>v.lang.startsWith('en'))||null);
+  if(voice) utter.voice=voice;
+  utter.lang=isHindi?'hi-IN':'en-IN'; utter.rate=0.92; utter.pitch=1.0; utter.volume=1.0;
+  setStatus('🔊 Speaking…');
+  utter.onend=()=>{setStatus('Ready');if(onEnd)onEnd();};
+  utter.onerror=()=>{setStatus('Ready');if(onEnd)onEnd();};
   synth.speak(utter);
 }
-if(synth && synth.onvoiceschanged !== undefined){
-  synth.onvoiceschanged = ()=> synth.getVoices();
-}
+if(synth && synth.onvoiceschanged!==undefined) synth.onvoiceschanged=()=>synth.getVoices();
 
 function toggleMic(){ if(isListening) stopListening(); else startListening(); }
 
@@ -998,43 +973,42 @@ def run_tts(text, lang):
             print("Groq TTS Fallback ERROR:", e2)
             return None
 
-# ── Google Cloud TTS (Natural Neural2 voices) ────────────────────
-def run_google_tts(text, lang):
-    """Use Google Cloud TTS Neural2 voices — most human-like quality."""
-    if not GOOGLE_TTS_KEY:
+# ── Edge TTS (Microsoft — Free, Unlimited, Human-like) ───────────
+def run_edge_tts(text, lang):
+    """
+    Microsoft Edge TTS — completely free, unlimited, no API key needed.
+    Hindi: hi-IN-SwaraNeural (natural female)
+    English: en-IN-NeerjaNeural (natural Indian female)
+    Install: pip install edge-tts
+    """
+    if not EDGE_TTS_AVAILABLE:
         return None
     try:
-        # Best natural voices: hi-IN-Neural2-A (female Hindi), en-IN-Neural2-A (female English)
-        if lang == "hi":
-            voice_name     = "hi-IN-Neural2-A"
-            language_code  = "hi-IN"
-        else:
-            voice_name     = "en-IN-Neural2-A"
-            language_code  = "en-IN"
+        voice = "hi-IN-SwaraNeural" if lang == "hi" else "en-IN-NeerjaNeural"
 
-        payload = json.dumps({
-            "input":       {"text": text},
-            "voice":       {"languageCode": language_code, "name": voice_name},
-            "audioConfig": {
-                "audioEncoding": "MP3",
-                "speakingRate":  0.95,   # slightly slower = more natural
-                "pitch":         0.0,
-                "volumeGainDb":  0.0
-            }
-        }).encode()
+        async def _synthesize():
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+                tmp_path = tmp.name
+            communicate = edge_tts.Communicate(text, voice)
+            await communicate.save(tmp_path)
+            with open(tmp_path, "rb") as f:
+                audio_bytes = f.read()
+            os.unlink(tmp_path)
+            return base64.b64encode(audio_bytes).decode()
 
-        url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={GOOGLE_TTS_KEY}"
-        req = urllib.request.Request(
-            url, data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read().decode())
-            audio_b64 = data.get("audioContent")
-            return audio_b64  # already base64 from Google
+        # Run async in sync context
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            return loop.run_until_complete(_synthesize())
+        except RuntimeError:
+            # If loop is already running (e.g. in some WSGI servers)
+            loop = asyncio.new_event_loop()
+            return loop.run_until_complete(_synthesize())
     except Exception as e:
-        print("Google TTS ERROR:", e)
+        print("Edge TTS ERROR:", e)
         return None
 
 # ── Image fetch ───────────────────────────────────────────────────
@@ -1161,9 +1135,9 @@ def chat():
 
     audio_b64 = None
     if tts_text:
-        # 1st choice: Google Neural2 (most natural)
-        audio_b64 = run_google_tts(tts_text, lang)
-        # 2nd choice: Groq TTS (if Google key not set)
+        # 1st choice: Edge TTS (free, unlimited, human-like — pip install edge-tts)
+        audio_b64 = run_edge_tts(tts_text, lang)
+        # 2nd choice: Groq TTS
         if not audio_b64:
             audio_b64 = run_tts(tts_text, lang)
 
