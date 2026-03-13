@@ -935,8 +935,19 @@ function stopListening(){
 
 # ── Language detection ────────────────────────────────────────────
 def detect_lang(text):
-    hindi = "अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह"
-    return "hi" if sum(1 for c in text if c in hindi) > 2 else "en"
+    # Hindi Unicode script check
+    hindi_chars = "अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह"
+    if sum(1 for ch in text if ch in hindi_chars) > 2:
+        return "hi"
+    # Hinglish detection (Roman Hindi words) — use Hindi/Swara voice
+    hinglish = {"kya","hai","hain","nahi","nhi","aap","tum","main","mein",
+                "mujhe","karo","karna","bhi","sirf","lekin","aur","yeh","woh",
+                "accha","theek","bilkul","bhai","yaar","kaise","kyun","kab",
+                "bahut","bohot","thoda","zyada","dekho","suno","chalo","abhi",
+                "phir","matlab","seedha","ho","hun","hoga","hogi","kar","bolo"}
+    if len(set(text.lower().split()) & hinglish) >= 2:
+        return "hi"
+    return "en"
 
 # ── TTS via Groq ──────────────────────────────────────────────────
 def run_tts(text, lang):
@@ -972,11 +983,13 @@ def run_tts(text, lang):
 
 
 # ── Edge TTS — Free, Unlimited, Human-like ────────────────────────
+# Hindi/Hinglish: hi-IN-SwaraNeural (natural female)
+# English: en-IN-NeerjaExpressiveNeural (expressive Indian female)
 def run_edge_tts(text, lang):
     if not EDGE_TTS_AVAILABLE:
         return None
     try:
-        voice = "hi-IN-SwaraNeural" if lang == "hi" else "en-IN-NeerjaNeural"
+        voice = "hi-IN-SwaraNeural" if lang == "hi" else "en-IN-NeerjaExpressiveNeural"
         async def _synth():
             tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
             tmp_path = tmp.name
@@ -1124,9 +1137,9 @@ def chat():
     tts_text = re.sub(r'[#*_~]', '', tts_text).strip()
     audio_b64 = None
     if tts_text:
-        audio_b64 = run_edge_tts(tts_text, lang)
+        audio_b64 = run_edge_tts(tts_text, lang)   # 1st: Edge TTS (human-like)
         if not audio_b64:
-            audio_b64 = run_tts(tts_text, lang)
+            audio_b64 = run_tts(tts_text, lang)     # 2nd: Groq fallback
     return jsonify({"reply": reply, "audio": audio_b64, "lang": lang})
 
 if __name__ == "__main__":
