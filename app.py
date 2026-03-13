@@ -11,6 +11,8 @@ from groq import Groq
 
 load_dotenv()
 
+GOOGLE_TTS_KEY = os.getenv("GOOGLE_TTS_KEY", "")
+
 app = Flask(__name__)
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 history = []
@@ -624,27 +626,23 @@ let isListening=false, isTalkMode=false, recognition=null, currentAudio=null;
 let msgCount = 0;
 
 // Unlock autoplay — Median/Android WebView compatible
-// We keep a persistent unlocked AudioContext and a silent Audio element
 let audioUnlocked = false;
 let audioCtx = null;
 
 function unlockAudio(){
   if(audioUnlocked) return;
   audioUnlocked = true;
-  // Method 1: Silent Audio element
   try{
     let a = new Audio();
     a.src = "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";
     a.volume = 0;
     a.play().catch(()=>{});
   } catch(e){}
-  // Method 2: AudioContext resume (required by some Android WebViews)
   try{
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if(audioCtx.state === "suspended") audioCtx.resume();
   } catch(e){}
 }
-// Unlock on any user gesture
 ['click','touchstart','touchend','keydown'].forEach(ev=>{
   document.addEventListener(ev, unlockAudio, {once:true});
 });
@@ -862,85 +860,58 @@ async function send(){
   }
 }
 
-// ── Groq TTS (primary — Arista-PlayAI Hindi / Fritz-PlayAI English) ──
+// ── Groq / Google TTS audio player (primary) ─────────────────────
 function playGroqAudio(b64, fallbackText, onEnd){
   try{
-    unlockAudio(); // ensure context is unlocked
+    unlockAudio();
     const binary = atob(b64);
     const bytes  = new Uint8Array(binary.length);
     for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
     const blob = new Blob([bytes], {type:'audio/mpeg'});
     const url  = URL.createObjectURL(blob);
-    if(currentAudio){ currentAudio.pause(); URL.revokeObjectURL(currentAudio._blobUrl||""); currentAudio=null; }
+    if(currentAudio){ currentAudio.pause(); currentAudio=null; }
     const audio = new Audio(url);
-    audio._blobUrl = url;
     currentAudio = audio;
     setStatus('🔊 Speaking…');
-    audio.onended = ()=>{
-      setStatus('Ready');
-      URL.revokeObjectURL(url);
-      currentAudio = null;
-      if(onEnd) onEnd();
-    };
-    audio.onerror = ()=>{
-      console.warn('Groq audio failed, falling back to browser TTS');
-      URL.revokeObjectURL(url);
-      currentAudio = null;
-      speakText(fallbackText, onEnd);
-    };
-    // Android WebView needs a tiny delay after unlock before play()
-    setTimeout(()=>{
-      audio.play().catch(err=>{
-        console.warn('Audio play() blocked:', err);
-        speakText(fallbackText, onEnd);
-      });
-    }, 80);
+    audio.onended = ()=>{ setStatus('Ready'); URL.revokeObjectURL(url); currentAudio=null; if(onEnd) onEnd(); };
+    audio.onerror = ()=>{ URL.revokeObjectURL(url); currentAudio=null; speakText(fallbackText, onEnd); };
+    setTimeout(()=>{ audio.play().catch(()=>{ speakText(fallbackText, onEnd); }); }, 80);
   } catch(e){
-    console.warn('playGroqAudio error:', e);
     speakText(fallbackText, onEnd);
   }
 }
 
-// ── Browser TTS (fallback — Web Speech API) ───────────────────────
+// ── Browser TTS (fallback only) ───────────────────────────────────
 const synth = window.speechSynthesis || null;
 
 function speakText(text, onEnd){
   if(!synth){ if(onEnd) onEnd(); return; }
   synth.cancel();
-
   const clean = text
     .replace(/```[\s\S]*?```/g, 'code block.')
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
-    .replace(/[#*_~]/g, '')
-    .trim();
-
+    .replace(/[#*_~]/g, '').trim();
   if(!clean){ if(onEnd) onEnd(); return; }
-
   const utter   = new SpeechSynthesisUtterance(clean);
   const isHindi = /[\u0900-\u097F]/.test(clean);
   const voices  = synth.getVoices();
-
   let voice = null;
   if(isHindi){
     voice = voices.find(v => v.lang.startsWith('hi')) || null;
   } else {
     voice = voices.find(v => v.lang === 'en-IN')
          || voices.find(v => v.lang.startsWith('en-IN'))
-         || voices.find(v => v.lang.startsWith('en-US') && v.localService)
-         || voices.find(v => v.lang.startsWith('en'))
-         || null;
+         || voices.find(v => v.lang.startsWith('en')) || null;
   }
   if(voice) utter.voice = voice;
-  utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
-  utter.rate   = 0.92; utter.pitch = 1.0; utter.volume = 1.0;
-
+  utter.lang = isHindi ? 'hi-IN' : 'en-IN';
+  utter.rate = 0.92; utter.pitch = 1.0; utter.volume = 1.0;
   setStatus('🔊 Speaking… (browser)');
   utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
   utter.onerror= ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
   synth.speak(utter);
 }
-
 if(synth && synth.onvoiceschanged !== undefined){
   synth.onvoiceschanged = ()=> synth.getVoices();
 }
@@ -1026,6 +997,45 @@ def run_tts(text, lang):
         except Exception as e2:
             print("Groq TTS Fallback ERROR:", e2)
             return None
+
+# ── Google Cloud TTS (Natural Neural2 voices) ────────────────────
+def run_google_tts(text, lang):
+    """Use Google Cloud TTS Neural2 voices — most human-like quality."""
+    if not GOOGLE_TTS_KEY:
+        return None
+    try:
+        # Best natural voices: hi-IN-Neural2-A (female Hindi), en-IN-Neural2-A (female English)
+        if lang == "hi":
+            voice_name     = "hi-IN-Neural2-A"
+            language_code  = "hi-IN"
+        else:
+            voice_name     = "en-IN-Neural2-A"
+            language_code  = "en-IN"
+
+        payload = json.dumps({
+            "input":       {"text": text},
+            "voice":       {"languageCode": language_code, "name": voice_name},
+            "audioConfig": {
+                "audioEncoding": "MP3",
+                "speakingRate":  0.95,   # slightly slower = more natural
+                "pitch":         0.0,
+                "volumeGainDb":  0.0
+            }
+        }).encode()
+
+        url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={GOOGLE_TTS_KEY}"
+        req = urllib.request.Request(
+            url, data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode())
+            audio_b64 = data.get("audioContent")
+            return audio_b64  # already base64 from Google
+    except Exception as e:
+        print("Google TTS ERROR:", e)
+        return None
 
 # ── Image fetch ───────────────────────────────────────────────────
 HEADERS = {"User-Agent": "KJMasterAI/2.0 (educational project)"}
@@ -1143,12 +1153,20 @@ def chat():
         img   = fetch_image(query)
         return jsonify({"type": "image", "image_url": img or "", "query": query})
 
-    # Try Groq TTS — clean markdown first
+    # Clean text for TTS
     tts_text = re.sub(r'```[\s\S]*?```', 'code block.', reply)
     tts_text = re.sub(r'\*\*(.*?)\*\*', r'\1', tts_text)
     tts_text = re.sub(r'`([^`]+)`', r'\1', tts_text)
     tts_text = re.sub(r'[#*_~]', '', tts_text).strip()
-    audio_b64 = run_tts(tts_text, lang) if tts_text else None
+
+    audio_b64 = None
+    if tts_text:
+        # 1st choice: Google Neural2 (most natural)
+        audio_b64 = run_google_tts(tts_text, lang)
+        # 2nd choice: Groq TTS (if Google key not set)
+        if not audio_b64:
+            audio_b64 = run_tts(tts_text, lang)
+
     return jsonify({"reply": reply, "audio": audio_b64, "lang": lang})
 
 if __name__ == "__main__":
