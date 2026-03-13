@@ -8,6 +8,7 @@ import json
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 from groq import Groq
+from elevenlabs.client import ElevenLabs
 
 load_dotenv()
 
@@ -15,6 +16,7 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 
 app = Flask(__name__)
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
 history = []
 
 SYSTEM = """
@@ -839,7 +841,7 @@ async function send(){
     }
     addAiMsg(data.reply);
     // Use browser TTS directly — no server audio needed
-    speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+    if(data.audio){ const audio=new Audio('data:audio/mp3;base64,'+data.audio); audio.play(); }
   } catch(e){
     const t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
@@ -1028,6 +1030,21 @@ def run_tts(text, lang):
             print("Groq TTS Fallback ERROR:", e2)
             return None
 
+
+# ── ElevenLabs TTS ───────────────────────────────────────────────
+def eleven_tts(text):
+    try:
+        audio_stream = eleven.generate(
+            text=text,
+            voice="Rachel",
+            model="eleven_multilingual_v2"
+        )
+        audio_bytes = b''.join(audio_stream)
+        return base64.b64encode(audio_bytes).decode()
+    except Exception as e:
+        print("ElevenLabs error:", e)
+        return None
+
 # ── Image fetch ───────────────────────────────────────────────────
 HEADERS = {"User-Agent": "KJMasterAI/2.0 (educational project)"}
 
@@ -1157,7 +1174,12 @@ def chat():
         return jsonify({"type": "image", "image_url": img or "", "query": query})
 
     # Browser Web Speech API handles TTS — no server audio needed
-    return jsonify({"reply": reply})
+    audio = eleven_tts(reply)
+
+    return jsonify({
+        "reply": reply,
+        "audio": audio
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
