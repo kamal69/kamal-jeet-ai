@@ -21,8 +21,6 @@ eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
 
 history = []
 
-# ================= SYSTEM PROMPT =================
-
 SYSTEM = """
 You are KJ Master AI - a friendly, smart AI assistant.
 You understand Hindi, English and Hinglish fluently.
@@ -30,8 +28,6 @@ Always reply in the same language the user speaks.
 Keep replies short and natural for voice conversation.
 """
 
-# ================= HTML =================
-# ⚠️ आपका पूरा HTML यहाँ रहेगा (जो आपने भेजा है)
 HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -42,498 +38,120 @@ HTML = """
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg:        #0d0d0d;
-  --sidebar:   #111111;
-  --surface:   #1a1a1a;
-  --surface2:  #222222;
-  --border:    #2a2a2a;
-  --accent:    #c96442;
-  --accent2:   #e07a52;
-  --text:      #ececec;
-  --text-muted:#888;
-  --user-bg:   #1e1e1e;
-  --ai-bg:     transparent;
-  --code-bg:   #161616;
-  --radius:    12px;
+  --bg:#0d0d0d; --sidebar:#111111; --surface:#1a1a1a; --surface2:#222222;
+  --border:#2a2a2a; --accent:#c96442; --accent2:#e07a52;
+  --text:#ececec; --text-muted:#888; --code-bg:#161616; --radius:12px;
 }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'Sora',sans-serif;display:flex;height:100vh;}
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* All buttons: fix mobile tap delay */
+button{touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:pointer;}
 
-html, body { height: 100%; overflow: hidden; }
+#sidebar{width:240px;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 14px;gap:8px;flex-shrink:0;}
+.logo{display:flex;align-items:center;gap:10px;padding:8px 10px 18px;border-bottom:1px solid var(--border);margin-bottom:6px;}
+.logo-text{font-size:15px;font-weight:600;letter-spacing:-0.3px;color:var(--text);}
+.logo-sub{font-size:10px;color:var(--text-muted);font-weight:300;}
+.new-chat-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'Sora',sans-serif;font-size:13px;transition:all 0.18s;width:100%;text-align:left;}
+.new-chat-btn:hover{background:var(--surface);border-color:var(--accent);}
+.sidebar-label{font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;padding:8px 10px 4px;}
+.chat-item{padding:8px 10px;border-radius:8px;font-size:12.5px;color:var(--text-muted);cursor:pointer;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.chat-item:hover,.chat-item.active{background:var(--surface2);color:var(--text);}
+.sidebar-bottom{margin-top:auto;padding-top:12px;border-top:1px solid var(--border);}
+.user-pill{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background 0.15s;}
+.user-pill:hover{background:var(--surface2);}
+.user-avatar{width:28px;height:28px;background:linear-gradient(135deg,var(--accent),#7c3aed);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;}
+.user-name{font-size:12.5px;font-weight:500;}
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Sora', sans-serif;
-  display: flex;
-  height: 100vh;
-}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;}
+#topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0;}
+.model-badge{display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--surface);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--text-muted);transition:all 0.15s;}
+.model-badge:hover{border-color:var(--accent);color:var(--text);}
+.model-dot{width:6px;height:6px;background:#22c55e;border-radius:50%;}
+#status-pill{font-size:12px;color:var(--text-muted);padding:4px 12px;border-radius:20px;background:var(--surface);border:1px solid var(--border);transition:all 0.2s;}
 
-/* ── Sidebar ── */
-#sidebar {
-  width: 240px;
-  background: var(--sidebar);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 20px 14px;
-  gap: 8px;
-  flex-shrink: 0;
-}
+#chat{flex:1;overflow-y:auto;padding:32px 0;display:flex;flex-direction:column;gap:0;scroll-behavior:smooth;}
+#chat::-webkit-scrollbar{width:4px;}
+#chat::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
 
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px 18px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 6px;
-}
+#welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:40px;text-align:center;}
+.welcome-icon{width:56px;height:56px;background:linear-gradient(135deg,var(--accent),#9333ea);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 0 40px rgba(201,100,66,0.25);}
+.welcome-title{font-size:26px;font-weight:600;letter-spacing:-0.5px;}
+.welcome-sub{font-size:14px;color:var(--text-muted);max-width:360px;line-height:1.6;}
+.suggestion-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;width:100%;max-width:500px;}
+.suggestion-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;color:var(--text-muted);cursor:pointer;transition:all 0.18s;text-align:left;line-height:1.4;}
+.suggestion-card:hover{border-color:var(--accent);color:var(--text);background:var(--surface2);}
+.suggestion-card strong{display:block;color:var(--text);font-size:12px;margin-bottom:3px;}
 
-.logo-icon {
-  width: 32px; height: 32px;
-  background: var(--accent);
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
-}
+.msg-row{padding:16px 24px;display:flex;gap:14px;animation:fadeUp 0.25s ease;max-width:820px;width:100%;margin:0 auto;}
+.msg-row.user-row{flex-direction:row-reverse;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+.avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;margin-top:2px;}
+.ai-avatar{background:linear-gradient(135deg,var(--accent),#9333ea);}
+.user-avatar2{background:linear-gradient(135deg,#2563eb,#7c3aed);}
+.bubble{max-width:680px;font-size:14.5px;line-height:1.75;color:var(--text);word-wrap:break-word;}
+.user-row .bubble{background:var(--surface2);border:1px solid var(--border);border-radius:16px 4px 16px 16px;padding:11px 16px;}
+.bubble p{margin:0 0 8px;}.bubble p:last-child{margin-bottom:0;}
+.bubble strong{color:#fbbf24;font-weight:600;}
+.bubble code{font-family:'JetBrains Mono',monospace;background:var(--code-bg);color:#7dd3fc;padding:2px 6px;border-radius:5px;font-size:13px;}
+.code-block-wrap{margin:10px 0 6px;border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+.code-header{display:flex;align-items:center;justify-content:space-between;background:#1c1c1c;padding:7px 14px;font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;}
+.bubble pre{background:var(--code-bg);padding:14px 16px;overflow-x:auto;font-size:13px;line-height:1.65;white-space:pre;margin:0;}
+.bubble pre code{background:none;padding:0;color:#e2e8f0;font-size:13px;}
+.copy-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);padding:3px 10px;border-radius:5px;font-size:11px;font-family:'Sora',sans-serif;transition:all 0.15s;}
+.copy-btn:hover{border-color:var(--accent);color:var(--text);}
 
-.logo-text {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-  color: var(--text);
-}
+.img-wrap{margin-top:4px;}
+.img-wrap img{max-width:300px;border-radius:var(--radius);border:1px solid var(--border);display:block;}
+.img-label{font-size:11px;color:var(--text-muted);margin-top:5px;}
 
-.logo-sub {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-weight: 300;
-}
+.typing-dots{display:flex;gap:5px;padding:8px 0;align-items:center;}
+.typing-dots span{width:7px;height:7px;background:var(--text-muted);border-radius:50%;animation:blink 1.2s infinite;}
+.typing-dots span:nth-child(2){animation-delay:0.2s;}
+.typing-dots span:nth-child(3){animation-delay:0.4s;}
+@keyframes blink{0%,80%,100%{opacity:0.2}40%{opacity:1}}
 
-.new-chat-btn {
-  display: flex; align-items: center; gap: 8px;
-  padding: 9px 12px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-family: 'Sora', sans-serif;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.18s;
-  width: 100%;
-  text-align: left;
-}
-.new-chat-btn:hover { background: var(--surface); border-color: var(--accent); }
+#input-area{padding:16px 24px 20px;background:var(--bg);border-top:1px solid var(--border);flex-shrink:0;}
+.input-box{max-width:820px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;display:flex;align-items:flex-end;gap:8px;padding:10px 12px;transition:border-color 0.2s;}
+.input-box:focus-within{border-color:var(--accent);}
+#text{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:'Sora',sans-serif;font-size:14px;line-height:1.5;resize:none;max-height:140px;padding:3px 4px;}
+#text::placeholder{color:var(--text-muted);}
 
-.sidebar-label {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  padding: 8px 10px 4px;
-}
+.icon-btn{width:44px;height:44px;border:none;border-radius:9px;background:var(--surface2);color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-size:18px;transition:all 0.17s;flex-shrink:0;}
+.icon-btn:hover{background:var(--border);color:var(--text);}
+.icon-btn.active{background:#dc2626;color:white;animation:pulse 1s infinite;}
 
-.chat-item {
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 12.5px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.chat-item:hover { background: var(--surface2); color: var(--text); }
-.chat-item.active { background: var(--surface2); color: var(--text); }
+#sendBtn{width:44px;height:44px;border:none;border-radius:9px;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;font-size:18px;transition:all 0.17s;flex-shrink:0;}
+#sendBtn:hover{background:var(--accent2);transform:scale(1.05);}
+#sendBtn:active{transform:scale(0.97);}
 
-.sidebar-bottom {
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
+#talkBtn{padding:0 14px;height:44px;border:1px solid var(--border);border-radius:9px;background:var(--surface2);color:var(--text-muted);font-family:'Sora',sans-serif;font-size:12px;font-weight:500;transition:all 0.17s;flex-shrink:0;white-space:nowrap;}
+#talkBtn:hover{border-color:#22c55e;color:#22c55e;}
+#talkBtn.active{background:#dc2626;border-color:#dc2626;color:white;animation:pulse 1s infinite;}
 
-.user-pill {
-  display: flex; align-items: center; gap: 9px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.user-pill:hover { background: var(--surface2); }
-.user-avatar {
-  width: 28px; height: 28px;
-  background: linear-gradient(135deg, var(--accent), #7c3aed);
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 600; flex-shrink: 0;
-}
-.user-name { font-size: 12.5px; font-weight: 500; }
+.input-hint{text-align:center;font-size:11px;color:var(--text-muted);margin-top:8px;max-width:820px;margin-left:auto;margin-right:auto;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.55}}
 
-/* ── Main area ── */
-#main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  position: relative;
-}
-
-/* ── Top bar ── */
-#topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-  flex-shrink: 0;
-}
-
-.model-badge {
-  display: flex; align-items: center; gap: 6px;
-  padding: 5px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.model-badge:hover { border-color: var(--accent); color: var(--text); }
-.model-dot { width: 6px; height: 6px; background: #22c55e; border-radius: 50%; }
-
-#status-pill {
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 4px 12px;
-  border-radius: 20px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  transition: all 0.2s;
-}
-
-/* ── Chat area ── */
-#chat {
-  flex: 1;
-  overflow-y: auto;
-  padding: 32px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  scroll-behavior: smooth;
-}
-
-#chat::-webkit-scrollbar { width: 4px; }
-#chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-/* ── Welcome screen ── */
-#welcome {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 40px;
-  text-align: center;
-}
-.welcome-icon {
-  width: 56px; height: 56px;
-  background: linear-gradient(135deg, var(--accent), #9333ea);
-  border-radius: 16px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 28px;
-  box-shadow: 0 0 40px rgba(201,100,66,0.25);
-}
-.welcome-title { font-size: 26px; font-weight: 600; letter-spacing: -0.5px; }
-.welcome-sub   { font-size: 14px; color: var(--text-muted); max-width: 360px; line-height: 1.6; }
-
-.suggestion-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 8px;
-  width: 100%;
-  max-width: 500px;
-}
-
-.suggestion-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  font-size: 13px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.18s;
-  text-align: left;
-  line-height: 1.4;
-}
-.suggestion-card:hover { border-color: var(--accent); color: var(--text); background: var(--surface2); }
-.suggestion-card strong { display: block; color: var(--text); font-size: 12px; margin-bottom: 3px; }
-
-/* ── Message rows ── */
-.msg-row {
-  padding: 16px 24px;
-  display: flex;
-  gap: 14px;
-  animation: fadeUp 0.25s ease;
-  max-width: 820px;
-  width: 100%;
-  margin: 0 auto;
-}
-.msg-row.user-row { flex-direction: row-reverse; }
-
-@keyframes fadeUp {
-  from { opacity:0; transform:translateY(10px); }
-  to   { opacity:1; transform:translateY(0); }
-}
-
-.avatar {
-  width: 34px; height: 34px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px;
-  font-weight: 600;
-  margin-top: 2px;
-}
-.ai-avatar   { background: linear-gradient(135deg, var(--accent), #9333ea); }
-.user-avatar2 { background: linear-gradient(135deg, #2563eb, #7c3aed); }
-
-.bubble {
-  max-width: 680px;
-  font-size: 14.5px;
-  line-height: 1.75;
-  color: var(--text);
-  word-wrap: break-word;
-}
-
-.user-row .bubble {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 16px 4px 16px 16px;
-  padding: 11px 16px;
-}
-
-/* ── Markdown inside bubble ── */
-.bubble p { margin: 0 0 8px; }
-.bubble p:last-child { margin-bottom: 0; }
-.bubble strong { color: #fbbf24; font-weight: 600; }
-.bubble code {
-  font-family: 'JetBrains Mono', monospace;
-  background: var(--code-bg);
-  color: #7dd3fc;
-  padding: 2px 6px;
-  border-radius: 5px;
-  font-size: 13px;
-}
-
-.code-block-wrap {
-  margin: 10px 0 6px;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-.code-header {
-  display: flex; align-items: center; justify-content: space-between;
-  background: #1c1c1c;
-  padding: 7px 14px;
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: 'JetBrains Mono', monospace;
-}
-.bubble pre {
-  background: var(--code-bg);
-  padding: 14px 16px;
-  overflow-x: auto;
-  font-size: 13px;
-  line-height: 1.65;
-  white-space: pre;
-  margin: 0;
-}
-.bubble pre code {
-  background: none;
-  padding: 0;
-  color: #e2e8f0;
-  font-size: 13px;
-}
-.copy-btn {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  padding: 3px 10px;
-  border-radius: 5px;
-  font-size: 11px;
-  cursor: pointer;
-  font-family: 'Sora', sans-serif;
-  transition: all 0.15s;
-}
-.copy-btn:hover { border-color: var(--accent); color: var(--text); }
-
-/* ── Image ── */
-.img-wrap { margin-top: 4px; }
-.img-wrap img {
-  max-width: 300px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  display: block;
-}
-.img-label { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
-
-/* ── Typing indicator ── */
-.typing-dots { display: flex; gap: 5px; padding: 8px 0; align-items: center; }
-.typing-dots span {
-  width: 7px; height: 7px;
-  background: var(--text-muted);
-  border-radius: 50%;
-  animation: blink 1.2s infinite;
-}
-.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
-
-/* ── Input area ── */
-#input-area {
-  padding: 16px 24px 20px;
-  background: var(--bg);
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.input-box {
-  max-width: 820px;
-  margin: 0 auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 10px 12px;
-  transition: border-color 0.2s;
-}
-.input-box:focus-within { border-color: var(--accent); }
-
-#text {
-  flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--text);
-  font-family: 'Sora', sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  resize: none;
-  max-height: 140px;
-  padding: 3px 4px;
-}
-#text::placeholder { color: var(--text-muted); }
-
-.icon-btn {
-  width: 36px; height: 36px;
-  border: none; border-radius: 9px;
-  background: var(--surface2);
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px;
-  transition: all 0.17s;
-  flex-shrink: 0;
-}
-.icon-btn:hover { background: var(--border); color: var(--text); }
-.icon-btn.active { background: #dc2626; color: white; animation: pulse 1s infinite; }
-
-#sendBtn {
-  width: 36px; height: 36px;
-  border: none; border-radius: 9px;
-  background: var(--accent);
-  color: white;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px;
-  transition: all 0.17s;
-  flex-shrink: 0;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-#sendBtn:hover { background: var(--accent2); transform: scale(1.05); }
-#sendBtn:active { transform: scale(0.97); }
-
-#talkBtn {
-  padding: 0 14px;
-  height: 36px;
-  border: none; border-radius: 9px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  cursor: pointer;
-  font-family: 'Sora', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all 0.17s;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-#talkBtn:hover   { border-color: #22c55e; color: #22c55e; }
-#talkBtn.active  { background: #dc2626; border-color: #dc2626; color: white; animation: pulse 1s infinite; }
-
-.input-hint {
-  text-align: center;
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 8px;
-  max-width: 820px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
-
-/* Mobile */
-@media(max-width: 640px){
-  #sidebar { display: none; }
-  .msg-row { padding: 12px 14px; }
-  #input-area { padding: 12px 10px 16px; }
-
-  .input-box {
-    border-radius: 12px;
-    padding: 8px 8px;
-    gap: 6px;
-    flex-wrap: nowrap;
-  }
-
-  /* Hide talkBtn on mobile — frees up space for send button */
-  #talkBtn { display: none; }
-
-  /* Bigger tap targets for mic and send on mobile */
-  .icon-btn, #sendBtn {
-    width: 44px;
-    height: 44px;
-    font-size: 18px;
-    flex-shrink: 0;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  /* Prevent iOS from zooming in when tapping the textarea */
-  #text { font-size: 16px; min-width: 0; }
+/* ── MOBILE ── */
+@media(max-width:640px){
+  #sidebar{display:none;}
+  .msg-row{padding:12px 14px;}
+  #input-area{padding:10px 10px 14px;}
+  .input-box{padding:8px;gap:6px;}
+  /* Hide Talk button on mobile — not enough space */
+  #talkBtn{display:none;}
+  /* Prevent iOS auto-zoom: textarea needs font-size >= 16px */
+  #text{font-size:16px !important;min-width:0;}
 }
 </style>
 </head>
 <body>
 
-<!-- Sidebar -->
 <div id="sidebar">
   <div class="logo">
-    <div class="logo-icon" style="background:none;padding:0;overflow:visible;">
-      <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+    <div style="width:32px;height:32px;flex-shrink:0;">
+      <svg width="32" height="32" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
         <rect width="36" height="36" rx="10" fill="#1a1a1a" stroke="#2a2a2a" stroke-width="1"/>
         <circle cx="18" cy="18" r="10" fill="none" stroke="#c96442" stroke-width="1.5"/>
         <circle cx="18" cy="18" r="6" fill="#c96442" opacity="0.15"/>
@@ -549,14 +167,9 @@ body {
       <div class="logo-sub">Powered by Kamal Jeet</div>
     </div>
   </div>
-
-  <button class="new-chat-btn" onclick="newChat()">
-    ✏️ &nbsp; New Chat
-  </button>
-
+  <button type="button" class="new-chat-btn" onclick="newChat()">✏️ &nbsp; New Chat</button>
   <div class="sidebar-label">Recent</div>
   <div class="chat-item active" id="currentChatLabel">New conversation</div>
-
   <div class="sidebar-bottom">
     <div class="user-pill">
       <div class="user-avatar">KJ</div>
@@ -568,22 +181,15 @@ body {
   </div>
 </div>
 
-<!-- Main -->
 <div id="main">
-
-  <!-- Top bar -->
   <div id="topbar">
-    <div class="model-badge">
-      <div class="model-dot"></div>
-      Online
-    </div>
+    <div class="model-badge"><div class="model-dot"></div>Online</div>
     <div style="display:flex;align-items:center;gap:10px;">
-      <button onclick="clearChat()" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'Sora',sans-serif;transition:all 0.15s;" onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">🗑️ Clear</button>
+      <button type="button" onclick="clearChat()" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:5px 12px;border-radius:20px;font-size:12px;font-family:'Sora',sans-serif;transition:all 0.15s;" onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">🗑️ Clear</button>
       <div id="status-pill">Ready</div>
     </div>
   </div>
 
-  <!-- Chat + Welcome -->
   <div id="chat">
     <div id="welcome">
       <div class="welcome-icon" style="background:none;border:none;box-shadow:none;">
@@ -599,25 +205,15 @@ body {
         </svg>
       </div>
       <div class="welcome-title">Sarthi AI</div>
-      
       <div class="suggestion-grid">
-        <div class="suggestion-card" onclick="suggest('Python mein inheritance kya hota hai?')">
-          <strong>💻 Code Seekhein</strong>Python inheritance explain karo
-        </div>
-        <div class="suggestion-card" onclick="suggest('Taj Mahal ki image dikhao')">
-          <strong>🖼️ Image Dekho</strong>Taj Mahal dikhao
-        </div>
-        <div class="suggestion-card" onclick="suggest('Aaj ka weather kaisa hai?')">
-          <strong>💬 Baat Karein</strong>Koi bhi sawaal poochho
-        </div>
-        <div class="suggestion-card" onclick="suggest('Mujhe motivate karo')">
-          <strong>✨ Motivation</strong>Motivational quote do
-        </div>
+        <div class="suggestion-card" onclick="suggest('Python mein inheritance kya hota hai?')"><strong>💻 Code Seekhein</strong>Python inheritance explain karo</div>
+        <div class="suggestion-card" onclick="suggest('Taj Mahal ki image dikhao')"><strong>🖼️ Image Dekho</strong>Taj Mahal dikhao</div>
+        <div class="suggestion-card" onclick="suggest('Aaj ka weather kaisa hai?')"><strong>💬 Baat Karein</strong>Koi bhi sawaal poochho</div>
+        <div class="suggestion-card" onclick="suggest('Mujhe motivate karo')"><strong>✨ Motivation</strong>Motivational quote do</div>
       </div>
     </div>
   </div>
 
-  <!-- Input -->
   <div id="input-area">
     <div class="input-box">
       <textarea id="text" rows="1" placeholder="Kuch bhi poochho…" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
@@ -627,37 +223,44 @@ body {
     </div>
     <div class="input-hint">Enter to send · Shift+Enter for new line · 🎤 for voice</div>
   </div>
-
 </div>
-<script>
-let isListening=false, isTalkMode=false, recognition=null, currentAudio=null;
-let msgCount = 0;
-let audioUnlocked = false;
 
-// ── iOS/Android autoplay unlock ──
-// Mobile browsers REQUIRE audio to be triggered inside a direct user gesture.
-// We unlock by creating + resuming an AudioContext on first tap/click.
+<script>
+// ── STATE ──
+var isListening  = false;
+var isTalkMode   = false;
+var recognition  = null;
+var currentAudio = null;
+var msgCount     = 0;
+var audioUnlocked= false;
+var isSending    = false;   // prevent double-send
+
+// ══════════════════════════════════════════════════════
+// FIX 1 — AUTOPLAY UNLOCK
+// Mobile blocks audio until a real user gesture.
+// Listen on BOTH touchstart + click to cover all devices.
+// ══════════════════════════════════════════════════════
 function unlockAudio(){
   if(audioUnlocked) return;
   audioUnlocked = true;
   try{
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    ctx.resume().then(()=>{ ctx.close(); });
-  } catch(e){}
-  // Also pre-play a silent mp3 so <Audio> tags are unlocked too
-  const a = new Audio();
-  a.src = "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume().then(function(){ ctx.close(); });
+  }catch(e){}
+  var a = new Audio();
+  a.src = 'data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA';
   a.volume = 0;
-  a.play().catch(()=>{});
+  a.play().catch(function(){});
 }
 document.addEventListener('touchstart', unlockAudio, {once:true});
 document.addEventListener('click',      unlockAudio, {once:true});
 
-function setStatus(m){
-  document.getElementById('status-pill').textContent = m;
-}
+// ── UTILS ──
+function setStatus(m){ document.getElementById('status-pill').textContent = m; }
+function esc(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function scrollBottom(){ var c=document.getElementById('chat'); c.scrollTop=c.scrollHeight; }
+function removeWelcome(){ var w=document.getElementById('welcome'); if(w) w.remove(); }
 
-// Auto-resize textarea
 function autoResize(el){
   el.style.height='auto';
   el.style.height=Math.min(el.scrollHeight,140)+'px';
@@ -668,87 +271,55 @@ function handleKey(e){
 }
 
 function suggest(text){
-  document.getElementById('text').value = text;
+  document.getElementById('text').value=text;
   send();
 }
 
-function newChat(){
-  clearChat();
-}
+// ── CHAT / CLEAR ──
+var WELCOME_CARDS = '<div class="suggestion-grid">'
+  +'<div class="suggestion-card" onclick="suggest(\'Python mein inheritance kya hota hai?\')"><strong>💻 Code Seekhein</strong>Python inheritance explain karo</div>'
+  +'<div class="suggestion-card" onclick="suggest(\'Taj Mahal ki image dikhao\')"><strong>🖼️ Image Dekho</strong>Taj Mahal dikhao</div>'
+  +'<div class="suggestion-card" onclick="suggest(\'Aaj ka weather kaisa hai?\')"><strong>💬 Baat Karein</strong>Koi bhi sawaal poochho</div>'
+  +'<div class="suggestion-card" onclick="suggest(\'Mujhe motivate karo\')"><strong>✨ Motivation</strong>Motivational quote do</div>'
+  +'</div>';
+
+function newChat(){ clearChat(); }
 
 function clearChat(){
-  history=[];
   document.getElementById('chat').innerHTML='';
-  const w=document.createElement('div');
+  var w=document.createElement('div');
   w.id='welcome';
-  w.innerHTML=`
-    <div class="welcome-icon">🤖</div>
-    <div class="welcome-title">KJ Master AI</div>
-    <div class="welcome-sub">Hindi, English, Hinglish — sab samajhta hun.</div>
-    <div class="suggestion-grid">
-      <div class="suggestion-card" onclick="suggest('Python mein inheritance kya hota hai?')"><strong>💻 Code Seekhein</strong>Python inheritance explain karo</div>
-      <div class="suggestion-card" onclick="suggest('Taj Mahal ki image dikhao')"><strong>🖼️ Image Dekho</strong>Taj Mahal dikhao</div>
-      <div class="suggestion-card" onclick="suggest('Aaj ka weather kaisa hai?')"><strong>💬 Baat Karein</strong>Koi bhi sawaal poochho</div>
-      <div class="suggestion-card" onclick="suggest('Mujhe motivate karo')"><strong>✨ Motivation</strong>Motivational quote do</div>
-    </div>`;
+  w.innerHTML='<div class="welcome-icon">🤖</div><div class="welcome-title">Sarthi AI</div><div class="welcome-sub">Hindi, English, Hinglish — sab samajhta hun.</div>'+WELCOME_CARDS;
   document.getElementById('chat').appendChild(w);
   msgCount=0;
+  isSending=false;
   document.getElementById('currentChatLabel').textContent='New conversation';
   setStatus('Ready');
-  // Also clear server-side history
-  fetch('/clear', {method:'POST'}).catch(()=>{});
+  fetch('/clear',{method:'POST'}).catch(function(){});
 }
 
-function newChat(){
-  history=[];
-  document.getElementById('chat').innerHTML='';
-  // Re-add welcome
-  const w=document.createElement('div');
-  w.id='welcome';
-  w.innerHTML=`
-    <div class="welcome-icon">🤖</div>
-    <div class="welcome-title">KJ Master AI</div>
-    <div class="welcome-sub">Hindi, English, Hinglish — sab samajhta hun.</div>
-    <div class="suggestion-grid">
-      <div class="suggestion-card" onclick="suggest('Python mein inheritance kya hota hai?')"><strong>💻 Code Seekhein</strong>Python inheritance explain karo</div>
-      <div class="suggestion-card" onclick="suggest('Taj Mahal ki image dikhao')"><strong>🖼️ Image Dekho</strong>Taj Mahal dikhao</div>
-      <div class="suggestion-card" onclick="suggest('Aaj ka weather kaisa hai?')"><strong>💬 Baat Karein</strong>Koi bhi sawaal poochho</div>
-      <div class="suggestion-card" onclick="suggest('Mujhe motivate karo')"><strong>✨ Motivation</strong>Motivational quote do</div>
-    </div>`;
-  document.getElementById('chat').appendChild(w);
-  msgCount=0;
-  document.getElementById('currentChatLabel').textContent='New conversation';
-}
-
-// ── Escape HTML ──
-function esc(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-// ── Render markdown-like text ──
+// ── MARKDOWN RENDERER ──
 function renderText(raw){
-  let html='';
-  const parts = raw.split(/(```[\s\S]*?```)/g);
-  parts.forEach(part=>{
+  var html='';
+  var parts=raw.split(/(```[\s\S]*?```)/g);
+  parts.forEach(function(part){
     if(part.startsWith('```') && part.endsWith('```')){
-      let inner = part.slice(3,-3);
-      let lang = '';
-      const nl = inner.indexOf('\\n');
+      var inner=part.slice(3,-3);
+      var lang='';
+      var nl=inner.indexOf('\n');
       if(nl!==-1){
-        const fl=inner.slice(0,nl).trim();
-        if(fl && fl.length<20 && !/\\s/.test(fl)){ lang=fl; inner=inner.slice(nl+1); }
+        var fl=inner.slice(0,nl).trim();
+        if(fl && fl.length<20 && !/\s/.test(fl)){lang=fl;inner=inner.slice(nl+1);}
       }
-      const codeId='c'+Math.random().toString(36).slice(2,7);
-      html+=`<div class="code-block-wrap">
-        <div class="code-header">
-          <span>${esc(lang)||'code'}</span>
-          <button class="copy-btn" onclick="copyCode('${codeId}')">Copy</button>
-        </div>
-        <pre><code id="${codeId}">${esc(inner.trim())}</code></pre>
-      </div>`;
+      var codeId='c'+Math.random().toString(36).slice(2,7);
+      html+='<div class="code-block-wrap"><div class="code-header"><span>'+(esc(lang)||'code')+'</span>'
+        +'<button type="button" class="copy-btn" onclick="copyCode(\''+codeId+'\')">Copy</button></div>'
+        +'<pre><code id="'+codeId+'">'+esc(inner.trim())+'</code></pre></div>';
     } else {
-      let t=esc(part);
-      t=t.replace(/\\*\\*(.*?)\\*\\*/g,'<strong>$1</strong>');
+      var t=esc(part);
+      t=t.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
       t=t.replace(/`([^`]+)`/g,'<code>$1</code>');
-      t=t.replace(/\\n/g,'<br>');
+      t=t.replace(/\n/g,'<br>');
       if(t.trim()) html+='<p>'+t+'</p>';
     }
   });
@@ -756,292 +327,264 @@ function renderText(raw){
 }
 
 function copyCode(id){
-  const el=document.getElementById(id);
-  if(!el) return;
-  navigator.clipboard.writeText(el.innerText).then(()=>{
-    const btn=document.querySelector(`[onclick="copyCode('${id}')"]`);
-    if(btn){ btn.textContent='✅ Copied'; setTimeout(()=>btn.textContent='Copy',2000); }
+  var el=document.getElementById(id); if(!el) return;
+  navigator.clipboard.writeText(el.innerText).then(function(){
+    var btn=document.querySelector('[onclick="copyCode(\''+id+'\')"]');
+    if(btn){btn.textContent='✅ Copied';setTimeout(function(){btn.textContent='Copy';},2000);}
   });
 }
 
-// ── Add message row ──
-function removeWelcome(){
-  const w=document.getElementById('welcome');
-  if(w) w.remove();
-}
-
+// ── MESSAGE BUILDERS ──
 function addUserMsg(text){
-  removeWelcome();
-  msgCount++;
-  if(msgCount===1){
-    const label=text.slice(0,28)+(text.length>28?'…':'');
-    document.getElementById('currentChatLabel').textContent=label;
-  }
-  const row=document.createElement('div');
+  removeWelcome(); msgCount++;
+  if(msgCount===1){ document.getElementById('currentChatLabel').textContent=text.slice(0,28)+(text.length>28?'…':''); }
+  var row=document.createElement('div');
   row.className='msg-row user-row';
-  row.innerHTML=`
-    <div class="avatar user-avatar2">KJ</div>
-    <div class="bubble"><p>${esc(text)}</p></div>`;
-  document.getElementById('chat').appendChild(row);
-  scrollBottom();
+  row.innerHTML='<div class="avatar user-avatar2">KJ</div><div class="bubble"><p>'+esc(text)+'</p></div>';
+  document.getElementById('chat').appendChild(row); scrollBottom();
 }
-
 function addAiMsg(text){
-  // Remove typing indicator if present
-  const t=document.getElementById('typing');
-  if(t) t.remove();
-
-  const row=document.createElement('div');
-  row.className='msg-row';
-  row.innerHTML=`
-    <div class="avatar ai-avatar" style="font-size:13px;font-weight:700;">S</div>
-    <div class="bubble">${renderText(text)}</div>`;
-  document.getElementById('chat').appendChild(row);
-  scrollBottom();
+  var t=document.getElementById('typing'); if(t) t.remove();
+  var row=document.createElement('div'); row.className='msg-row';
+  row.innerHTML='<div class="avatar ai-avatar" style="font-size:13px;font-weight:700;">S</div><div class="bubble">'+renderText(text)+'</div>';
+  document.getElementById('chat').appendChild(row); scrollBottom();
 }
-
 function addTyping(){
   removeWelcome();
-  const row=document.createElement('div');
-  row.id='typing'; row.className='msg-row';
-  row.innerHTML=`
-    <div class="avatar ai-avatar" style="font-size:13px;font-weight:700;">S</div>
-    <div class="bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
-  document.getElementById('chat').appendChild(row);
-  scrollBottom();
+  var row=document.createElement('div'); row.id='typing'; row.className='msg-row';
+  row.innerHTML='<div class="avatar ai-avatar" style="font-size:13px;font-weight:700;">S</div><div class="bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+  document.getElementById('chat').appendChild(row); scrollBottom();
+}
+function addImageMsg(src,label){
+  var t=document.getElementById('typing'); if(t) t.remove();
+  var row=document.createElement('div'); row.className='msg-row';
+  row.innerHTML='<div class="avatar ai-avatar">✦</div><div class="bubble"><div class="img-wrap">'
+    +'<img src="'+src+'" alt="'+esc(label||'')+'" onerror="this.parentElement.innerHTML=\'<p>❌ Image load nahi hui</p>\'">'
+    +'<div class="img-label">🖼️ '+esc(label||'Image')+'</div></div></div>';
+  document.getElementById('chat').appendChild(row); scrollBottom();
 }
 
-function addImageMsg(src, label){
-  const t=document.getElementById('typing'); if(t) t.remove();
-  const row=document.createElement('div');
-  row.className='msg-row';
-  row.innerHTML=`
-    <div class="avatar ai-avatar">✦</div>
-    <div class="bubble">
-      <div class="img-wrap">
-        <img src="${src}" alt="${esc(label||'')}" onerror="this.parentElement.innerHTML='<p>❌ Image load nahi hui</p>'">
-        <div class="img-label">🖼️ ${esc(label||'Image')}</div>
-      </div>
-    </div>`;
-  document.getElementById('chat').appendChild(row);
-  scrollBottom();
-}
-
-function scrollBottom(){
-  const c=document.getElementById('chat'); c.scrollTop=c.scrollHeight;
-}
-
-// ── Send ──
+// ══════════════════════════════════════════════════════
+// FIX 2 — SEND FUNCTION
+// Problems fixed:
+//  a) speakText() was never called (voice never played)
+//  b) Talk mode loop never restarted mic after reply
+//  c) isSending guard prevents double-tap duplicate sends
+// ══════════════════════════════════════════════════════
 async function send(){
-  const input=document.getElementById('text');
-  const msg=input.value.trim(); if(!msg) return;
+  if(isSending) return;                          // prevent double send
+  var input=document.getElementById('text');
+  var msg=input.value.trim();
+  if(!msg) return;
+
+  isSending=true;
   addUserMsg(msg);
   input.value=''; input.style.height='auto';
   addTyping();
   setStatus('⏳ Thinking…');
+
   try{
-    const res=await fetch('/chat',{
-      method:'POST', headers:{'Content-Type':'application/json'},
+    var res=await fetch('/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:msg})
     });
-    const data=await res.json();
+    var data=await res.json();
+
     if(data.type==='image'){
-      if(data.image_url) addImageMsg(data.image_url, data.query);
+      if(data.image_url) addImageMsg(data.image_url,data.query);
       else addAiMsg('❌ Image nahi mili: '+data.query);
       setStatus('Ready');
+      isSending=false;
       if(isTalkMode) startListening();
       return;
     }
-    addAiMsg(data.reply);
 
-    // ── FIX 1: Play ElevenLabs audio if available, else use browser TTS ──
+    addAiMsg(data.reply);
+    isSending=false;
+
+    // ── Play audio: ElevenLabs first, browser TTS as fallback ──
     if(data.audio){
-      // Stop any previous audio
-      if(currentAudio){ currentAudio.pause(); currentAudio=null; }
+      if(currentAudio){currentAudio.pause();currentAudio=null;}
       window.speechSynthesis.cancel();
-      const audio = new Audio('data:audio/mp3;base64,'+data.audio);
-      currentAudio = audio;
+      var audio=new Audio('data:audio/mp3;base64,'+data.audio);
+      currentAudio=audio;
       setStatus('🔊 Speaking…');
-      audio.onended = ()=>{
-        currentAudio = null;
-        setStatus('Ready');
-        // ── FIX 2: Resume listening after speaking in Talk Mode ──
-        if(isTalkMode) startListening();
+      audio.onended=function(){
+        currentAudio=null; setStatus('Ready');
+        if(isTalkMode) startListening();          // ← restart mic loop
       };
-      audio.onerror = ()=>{
-        currentAudio = null;
-        // Fallback to browser TTS if ElevenLabs audio fails
-        speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+      audio.onerror=function(){
+        currentAudio=null;
+        speakText(data.reply,function(){ if(isTalkMode) startListening(); });
       };
-      audio.play().catch(()=>{
-        // Autoplay blocked — fallback to browser TTS
-        speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+      audio.play().catch(function(){
+        // Autoplay blocked → browser TTS
+        speakText(data.reply,function(){ if(isTalkMode) startListening(); });
       });
     } else {
-      // No ElevenLabs audio — use browser TTS
-      speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+      speakText(data.reply,function(){ if(isTalkMode) startListening(); });
     }
 
-  } catch(e){
-    const t=document.getElementById('typing'); if(t) t.remove();
+  }catch(e){
+    var t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
     setStatus('Error');
+    isSending=false;
     if(isTalkMode) startListening();
   }
 }
 
-// ── Browser TTS (Web Speech API) ──────────
+// ══════════════════════════════════════════════════════
+// FIX 3 — BROWSER TTS
+// Android Chrome silently stops on long text (~200 chars).
+// Fix: chunk text into short sentences + keepAlive ping.
+// ══════════════════════════════════════════════════════
 function speakText(text, onEnd){
   window.speechSynthesis.cancel();
-
-  const clean = text
-    .replace(/```[\s\S]*?```/g, 'code block.')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/[#*_~]/g, '')
+  var clean=text
+    .replace(/```[\s\S]*?```/g,'code block.')
+    .replace(/\*\*(.*?)\*\*/g,'$1')
+    .replace(/`([^`]+)`/g,'$1')
+    .replace(/[#*_~]/g,'')
     .trim();
+  if(!clean){if(onEnd)onEnd();return;}
 
-  if(!clean){ if(onEnd) onEnd(); return; }
+  // Split into short chunks
+  var sentences=clean.match(/[^।!?.]+[।!?.]?/g)||[clean];
+  var chunks=[]; var cur='';
+  sentences.forEach(function(s){
+    if((cur+s).length>180){if(cur)chunks.push(cur.trim());cur=s;}
+    else cur+=s;
+  });
+  if(cur.trim())chunks.push(cur.trim());
 
-  // ── Android Chrome bug: speechSynthesis silently stops on long text ──
-  // Fix: split into shorter sentences and speak them one by one.
-  const sentences = clean.match(/[^।।!?.]+[।।!?.]?/g) || [clean];
-  const chunks = [];
-  let current = '';
-  for(const s of sentences){
-    if((current + s).length > 180){ if(current) chunks.push(current.trim()); current = s; }
-    else current += s;
-  }
-  if(current.trim()) chunks.push(current.trim());
+  var voices=window.speechSynthesis.getVoices();
+  var idx=0;
 
-  const voices = window.speechSynthesis.getVoices();
-  let chunkIndex = 0;
-
-  function speakChunk(){
-    if(chunkIndex >= chunks.length){ setStatus('Ready'); if(onEnd) onEnd(); return; }
-    const utter = new SpeechSynthesisUtterance(chunks[chunkIndex++]);
-    const isHindi = /[\u0900-\u097F]/.test(utter.text);
-    let voice = null;
-    if(isHindi){
-      voice = voices.find(v => v.lang.startsWith('hi')) || null;
-    } else {
-      voice = voices.find(v => v.lang === 'en-IN')
-           || voices.find(v => v.lang.startsWith('en-IN'))
-           || voices.find(v => v.lang.startsWith('en-US') && v.localService)
-           || voices.find(v => v.lang.startsWith('en'))
-           || null;
-    }
-    if(voice) utter.voice = voice;
-    utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
-    utter.rate   = 0.92;
-    utter.pitch  = 1.0;
-    utter.volume = 1.0;
-    utter.onend  = speakChunk;
-    utter.onerror = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
-    window.speechSynthesis.speak(utter);
-  }
-
-  // Android Chrome keepAlive: speechSynthesis pauses after ~15s without this
-  const keepAlive = setInterval(()=>{
-    if(!window.speechSynthesis.speaking){ clearInterval(keepAlive); return; }
+  // Android Chrome keepAlive: synthesis silently pauses after ~15s
+  var keepAlive=setInterval(function(){
+    if(!window.speechSynthesis.speaking){clearInterval(keepAlive);return;}
     window.speechSynthesis.pause();
     window.speechSynthesis.resume();
-  }, 12000);
+  },10000);
 
+  function next(){
+    if(idx>=chunks.length){clearInterval(keepAlive);setStatus('Ready');if(onEnd)onEnd();return;}
+    var utter=new SpeechSynthesisUtterance(chunks[idx++]);
+    var isHindi=/[\u0900-\u097F]/.test(utter.text);
+    var voice=null;
+    if(isHindi){
+      voice=voices.find(function(v){return v.lang.startsWith('hi');})||null;
+    }else{
+      voice=voices.find(function(v){return v.lang==='en-IN';})
+        ||voices.find(function(v){return v.lang.startsWith('en-IN');})
+        ||voices.find(function(v){return v.lang.startsWith('en-US')&&v.localService;})
+        ||voices.find(function(v){return v.lang.startsWith('en');})||null;
+    }
+    if(voice)utter.voice=voice;
+    utter.lang=isHindi?'hi-IN':'en-IN';
+    utter.rate=0.92; utter.pitch=1.0; utter.volume=1.0;
+    utter.onend=next;
+    utter.onerror=function(){clearInterval(keepAlive);setStatus('Ready');if(onEnd)onEnd();};
+    window.speechSynthesis.speak(utter);
+  }
   setStatus('🔊 Speaking…');
-  speakChunk();
+  next();
 }
 
-// Preload voices
-if(window.speechSynthesis.onvoiceschanged !== undefined){
-  window.speechSynthesis.onvoiceschanged = ()=> window.speechSynthesis.getVoices();
+// Preload voices (async on Chrome)
+if(window.speechSynthesis.onvoiceschanged!==undefined){
+  window.speechSynthesis.onvoiceschanged=function(){window.speechSynthesis.getVoices();};
 }
 
+// ── MIC / TALK ──
 function toggleMic(){ if(isListening) stopListening(); else startListening(); }
 
 function toggleTalk(){
   isTalkMode=!isTalkMode;
-  const btn=document.getElementById('talkBtn');
+  var btn=document.getElementById('talkBtn');
   if(isTalkMode){
     btn.textContent='⏹ Stop Talk'; btn.classList.add('active');
     setStatus('🎙️ Talk Mode ON');
     startListening();
-  } else {
+  }else{
     btn.textContent='🔁 Talk'; btn.classList.remove('active');
     stopListening(); setStatus('Ready');
   }
 }
 
+// ══════════════════════════════════════════════════════
+// FIX 4 — buildRecognition
+// Added: iOS Safari check, permission error alert,
+// network error retry, continuous=false for Android.
+// ══════════════════════════════════════════════════════
 function buildRecognition(){
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){
-    // iOS Safari does NOT support SpeechRecognition
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
     if(isIOS){
-      setStatus('❌ iOS Safari mic support nahi hai. Chrome use karein.');
-      alert('iOS Safari mein voice nahi chalta.\nPlease Chrome browser use karein ya text type karein.');
-    } else {
+      setStatus('❌ iOS Safari mic support nahi. Chrome use karein.');
+      alert('iOS Safari mein voice nahi chalta.\nPlease Chrome browser use karein.');
+    }else{
       alert('Yeh browser mic support nahi karta. Chrome use karein!');
     }
-    return null;
+    isTalkMode=false; return null;
   }
-  const r = new SR();
-  r.lang = 'hi-IN';
-  r.interimResults = false;
-  r.maxAlternatives = 1;
-  r.continuous = false; // IMPORTANT: true causes issues on Android Chrome
+  var r=new SR();
+  r.lang='hi-IN'; r.interimResults=false; r.maxAlternatives=1;
+  r.continuous=false;   // true breaks Android Chrome
 
-  r.onstart = ()=>{
-    isListening = true;
+  r.onstart=function(){
+    isListening=true;
     document.getElementById('micBtn').classList.add('active');
     setStatus('🎙️ Listening…');
   };
-
-  r.onresult = (e)=>{
-    const t = e.results[0][0].transcript;
-    document.getElementById('text').value = t;
-    stopListening();
-    send();
+  r.onresult=function(e){
+    var t=e.results[0][0].transcript;
+    document.getElementById('text').value=t;
+    stopListening(); send();
   };
-
-  r.onerror = (e)=>{
+  r.onerror=function(e){
     stopListening();
-    if(e.error === 'not-allowed'){
+    if(e.error==='not-allowed'){
       setStatus('❌ Mic permission denied');
       alert('Mic ki permission do:\nSettings > Browser > Microphone > Allow');
-    } else if(e.error === 'network'){
-      setStatus('❌ Network error - retry kar');
-      // On mobile, network errors are common — auto-retry in talk mode
-      if(isTalkMode) setTimeout(()=> startListening(), 1500);
-    } else {
-      setStatus('Mic error: ' + e.error);
+      isTalkMode=false;
+    }else if(e.error==='network'){
+      setStatus('⚠️ Network error, retry…');
+      if(isTalkMode) setTimeout(function(){startListening();},1500);
+    }else{
+      setStatus('Mic error: '+e.error);
     }
   };
-
-  r.onend = ()=>{ stopListening(); };
-
+  r.onend=function(){ stopListening(); };
   return r;
 }
 
+// ══════════════════════════════════════════════════════
+// FIX 5 — startListening
+// On Android Chrome, calling recognition.start() right
+// after audio ends silently fails. 400ms delay fixes it.
+// ══════════════════════════════════════════════════════
 function startListening(){
   if(isListening) return;
   window.speechSynthesis.cancel();
-  if(currentAudio){ currentAudio.pause(); currentAudio=null; }
-  // On mobile (especially Android Chrome), calling recognition.start() immediately
-  // after audio ends causes a silent failure. A short delay fixes this.
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const delay = isMobile ? 400 : 0;
-  setTimeout(()=>{
-    recognition = buildRecognition();
+  if(currentAudio){currentAudio.pause();currentAudio=null;}
+  var isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  var delay=isMobile?400:0;
+  setTimeout(function(){
+    recognition=buildRecognition();
     if(!recognition) return;
-    try{ recognition.start(); } catch(e){ console.warn('recognition.start error:', e); }
-  }, delay);
+    try{recognition.start();}
+    catch(e){console.warn('recognition.start error:',e);}
+  },delay);
 }
 
 function stopListening(){
   isListening=false;
   document.getElementById('micBtn').classList.remove('active');
-  if(recognition){ try{recognition.stop();}catch(e){} recognition=null; }
+  if(recognition){try{recognition.stop();}catch(e){}recognition=null;}
 }
 </script>
 </body>
@@ -1059,104 +602,63 @@ def detect_lang(text):
 # ================= ELEVENLABS VOICE =================
 
 def eleven_tts(text):
-
     try:
-
         audio = eleven.text_to_speech.convert(
-
             voice_id="21m00Tcm4TlvDq8ikWAM",
-
             model_id="eleven_multilingual_v2",
-
             text=text
         )
-
         audio_bytes = b"".join(audio)
-
         return base64.b64encode(audio_bytes).decode()
-
     except Exception as e:
-
         print("ElevenLabs ERROR:", e)
-
         return None
 
 
 # ================= WEB SEARCH =================
 
 def web_search(query):
-
     if not TAVILY_API_KEY:
         return None
-
     try:
-
         payload = json.dumps({
             "api_key": TAVILY_API_KEY,
             "query": query,
             "max_results": 3
         }).encode()
-
         req = urllib.request.Request(
             "https://api.tavily.com/search",
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST"
         )
-
         with urllib.request.urlopen(req, timeout=8) as r:
-
             data = json.loads(r.read().decode())
-
         if data.get("answer"):
             return data["answer"]
-
         results = data.get("results", [])
-
         snippets = [r.get("content","")[:200] for r in results]
-
         return " ".join(snippets)
-
     except Exception as e:
-
         print("Search error:", e)
-
         return None
 
 
 # ================= IMAGE FETCH =================
 
 def fetch_image(query):
-
     try:
-
         url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
-
-            "action":"query",
-
-            "titles":query,
-
-            "prop":"pageimages",
-
-            "pithumbsize":600,
-
-            "format":"json"
+            "action":"query", "titles":query, "prop":"pageimages",
+            "pithumbsize":600, "format":"json"
         })
-
         with urllib.request.urlopen(url) as r:
-
             data = json.loads(r.read().decode())
-
         for page in data["query"]["pages"].values():
-
             if "thumbnail" in page:
-
                 return page["thumbnail"]["source"]
-
     except:
-
         pass
-
     return None
 
 
@@ -1164,102 +666,42 @@ def fetch_image(query):
 
 @app.route("/")
 def home():
-
     return render_template_string(HTML)
-
 
 @app.route("/clear", methods=["POST"])
 def clear():
-
     global history
-
     history = []
-
     return jsonify({"status":"cleared"})
-
 
 @app.route("/chat", methods=["POST"])
 def chat():
-
     data = request.json
-
     msg = data.get("message","")
-
-    history.append({
-
-        "role":"user",
-
-        "content":msg
-    })
-
-    messages = [
-
-        {"role":"system","content":SYSTEM}
-
-    ] + history
-
+    history.append({"role":"user","content":msg})
+    messages = [{"role":"system","content":SYSTEM}] + history
     search = web_search(msg)
-
     if search:
-
-        messages.insert(1,{
-
-            "role":"system",
-
-            "content":"Latest web info:\n"+search
-        })
-
+        messages.insert(1,{"role":"system","content":"Latest web info:\n"+search})
     resp = client.chat.completions.create(
-
         model="llama-3.3-70b-versatile",
-
         messages=messages,
-
         max_tokens=300,
-
         temperature=0.7
     )
-
     reply = resp.choices[0].message.content.strip()
-
-    history.append({
-
-        "role":"assistant",
-
-        "content":reply
-    })
-
+    history.append({"role":"assistant","content":reply})
     img_match = re.match(r'^\[IMAGE:(.*?)\]$', reply, re.IGNORECASE)
-
     if img_match:
-
         q = img_match.group(1)
-
         img = fetch_image(q)
-
-        return jsonify({
-
-            "type":"image",
-
-            "image_url":img,
-
-            "query":q
-        })
-
+        return jsonify({"type":"image","image_url":img,"query":q})
     audio = eleven_tts(reply)
-
-    return jsonify({
-
-        "reply":reply,
-
-        "audio":audio
-    })
+    return jsonify({"reply":reply,"audio":audio})
 
 
 # ================= START SERVER =================
 
 if __name__ == "__main__":
-
     port = int(os.environ.get("PORT",5000))
-
     app.run(host="0.0.0.0", port=port)
