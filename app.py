@@ -623,12 +623,31 @@ body {
 let isListening=false, isTalkMode=false, recognition=null, currentAudio=null;
 let msgCount = 0;
 
-// Unlock autoplay
-document.addEventListener('click',()=>{
-  let a=new Audio();
-  a.src="data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";
-  a.play().catch(()=>{});
-},{once:true});
+// Unlock autoplay — Median/Android WebView compatible
+// We keep a persistent unlocked AudioContext and a silent Audio element
+let audioUnlocked = false;
+let audioCtx = null;
+
+function unlockAudio(){
+  if(audioUnlocked) return;
+  audioUnlocked = true;
+  // Method 1: Silent Audio element
+  try{
+    let a = new Audio();
+    a.src = "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";
+    a.volume = 0;
+    a.play().catch(()=>{});
+  } catch(e){}
+  // Method 2: AudioContext resume (required by some Android WebViews)
+  try{
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === "suspended") audioCtx.resume();
+  } catch(e){}
+}
+// Unlock on any user gesture
+['click','touchstart','touchend','keydown'].forEach(ev=>{
+  document.addEventListener(ev, unlockAudio, {once:true});
+});
 
 function setStatus(m){
   document.getElementById('status-pill').textContent = m;
@@ -830,7 +849,6 @@ async function send(){
       return;
     }
     addAiMsg(data.reply);
-    // Try Groq TTS audio first; fallback to browser TTS if unavailable
     if(data.audio){
       playGroqAudio(data.audio, data.reply, ()=>{ if(isTalkMode) startListening(); });
     } else {
@@ -844,32 +862,41 @@ async function send(){
   }
 }
 
-// ── Groq TTS (primary — natural Arista-PlayAI / Fritz-PlayAI voice) ──
+// ── Groq TTS (primary — Arista-PlayAI Hindi / Fritz-PlayAI English) ──
 function playGroqAudio(b64, fallbackText, onEnd){
   try{
+    unlockAudio(); // ensure context is unlocked
     const binary = atob(b64);
     const bytes  = new Uint8Array(binary.length);
     for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
-    const blob = new Blob([bytes], {type:'audio/mp3'});
+    const blob = new Blob([bytes], {type:'audio/mpeg'});
     const url  = URL.createObjectURL(blob);
-    if(currentAudio){ currentAudio.pause(); currentAudio=null; }
-    currentAudio = new Audio(url);
+    if(currentAudio){ currentAudio.pause(); URL.revokeObjectURL(currentAudio._blobUrl||""); currentAudio=null; }
+    const audio = new Audio(url);
+    audio._blobUrl = url;
+    currentAudio = audio;
     setStatus('🔊 Speaking…');
-    currentAudio.onended = ()=>{
+    audio.onended = ()=>{
       setStatus('Ready');
       URL.revokeObjectURL(url);
-      currentAudio=null;
+      currentAudio = null;
       if(onEnd) onEnd();
     };
-    currentAudio.onerror = ()=>{
-      console.warn('Groq audio error — falling back to browser TTS');
+    audio.onerror = ()=>{
+      console.warn('Groq audio failed, falling back to browser TTS');
       URL.revokeObjectURL(url);
-      currentAudio=null;
+      currentAudio = null;
       speakText(fallbackText, onEnd);
     };
-    currentAudio.play().catch(()=>{ speakText(fallbackText, onEnd); });
+    // Android WebView needs a tiny delay after unlock before play()
+    setTimeout(()=>{
+      audio.play().catch(err=>{
+        console.warn('Audio play() blocked:', err);
+        speakText(fallbackText, onEnd);
+      });
+    }, 80);
   } catch(e){
-    console.warn('Groq audio decode error:', e);
+    console.warn('playGroqAudio error:', e);
     speakText(fallbackText, onEnd);
   }
 }
@@ -906,9 +933,7 @@ function speakText(text, onEnd){
   }
   if(voice) utter.voice = voice;
   utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
-  utter.rate   = 0.92;
-  utter.pitch  = 1.0;
-  utter.volume = 1.0;
+  utter.rate   = 0.92; utter.pitch = 1.0; utter.volume = 1.0;
 
   setStatus('🔊 Speaking… (browser)');
   utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
@@ -916,7 +941,6 @@ function speakText(text, onEnd){
   synth.speak(utter);
 }
 
-// Preload voices
 if(synth && synth.onvoiceschanged !== undefined){
   synth.onvoiceschanged = ()=> synth.getVoices();
 }
@@ -950,7 +974,7 @@ function buildRecognition(){
 
 function startListening(){
   if(isListening) return;
-  if(synth) synth.cancel(); // Stop speaking before listening
+  if(synth) synth.cancel();
   if(currentAudio){currentAudio.pause();currentAudio=null;}
   recognition=buildRecognition(); if(!recognition) return;
   try{ recognition.start(); } catch(e){ console.warn(e); }
@@ -1119,12 +1143,11 @@ def chat():
         img   = fetch_image(query)
         return jsonify({"type": "image", "image_url": img or "", "query": query})
 
-    # Try Groq TTS for natural voice (Arista-PlayAI for Hindi, Fritz-PlayAI for English)
+    # Try Groq TTS — clean markdown first
     tts_text = re.sub(r'```[\s\S]*?```', 'code block.', reply)
     tts_text = re.sub(r'\*\*(.*?)\*\*', r'\1', tts_text)
     tts_text = re.sub(r'`([^`]+)`', r'\1', tts_text)
     tts_text = re.sub(r'[#*_~]', '', tts_text).strip()
-
     audio_b64 = run_tts(tts_text, lang) if tts_text else None
     return jsonify({"reply": reply, "audio": audio_b64, "lang": lang})
 
