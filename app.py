@@ -688,6 +688,7 @@ function esc(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/
 
 // ── Render markdown-like text ──
 function renderText(raw){
+  if(!raw) return '';          // guard: undefined/null crash fix
   let html='';
   const parts = raw.split(/(```[\s\S]*?```)/g);
   parts.forEach(part=>{
@@ -750,6 +751,7 @@ function addUserMsg(text){
 }
 
 function addAiMsg(text){
+  text = text || '';           // guard: undefined/null crash fix
   // Remove typing indicator if present
   const t=document.getElementById('typing');
   if(t) t.remove();
@@ -815,7 +817,8 @@ async function send(){
       if(isTalkMode) startListening();
       return;
     }
-    addAiMsg(data.reply);
+    const reply = data.reply || '';
+    addAiMsg(reply);
 
     // Play ElevenLabs audio if available, else browser TTS
     // After audio ends → restart mic if Talk Mode is ON
@@ -832,15 +835,14 @@ async function send(){
       };
       audio.onerror = ()=>{
         currentAudio = null;
-        speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+        speakText(reply, ()=>{ if(isTalkMode) startListening(); });
       };
       audio.play().catch(()=>{
-        speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+        speakText(reply, ()=>{ if(isTalkMode) startListening(); });
       });
     } else {
-      speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+      speakText(reply, ()=>{ if(isTalkMode) startListening(); });
     }
-
   } catch(e){
     const t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
@@ -851,6 +853,7 @@ async function send(){
 
 // ── Browser TTS (Web Speech API — works on ALL browsers) ──────────
 function speakText(text, onEnd){
+  if(!text){ if(onEnd) onEnd(); return; }  // guard: undefined crash fix
   window.speechSynthesis.cancel();
 
   // Clean markdown for speech
