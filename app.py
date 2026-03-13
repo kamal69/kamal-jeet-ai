@@ -460,6 +460,8 @@ body {
   font-size: 16px;
   transition: all 0.17s;
   flex-shrink: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 #sendBtn:hover { background: var(--accent2); transform: scale(1.05); }
 #sendBtn:active { transform: scale(0.97); }
@@ -498,8 +500,30 @@ body {
 @media(max-width: 640px){
   #sidebar { display: none; }
   .msg-row { padding: 12px 14px; }
-  .input-box { border-radius: 12px; }
-  #input-area { padding: 12px 14px 16px; }
+  #input-area { padding: 12px 10px 16px; }
+
+  .input-box {
+    border-radius: 12px;
+    padding: 8px 8px;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  /* Hide talkBtn on mobile — frees up space for send button */
+  #talkBtn { display: none; }
+
+  /* Bigger tap targets for mic and send on mobile */
+  .icon-btn, #sendBtn {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+    flex-shrink: 0;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent iOS from zooming in when tapping the textarea */
+  #text { font-size: 16px; min-width: 0; }
 }
 </style>
 </head>
@@ -597,9 +621,9 @@ body {
   <div id="input-area">
     <div class="input-box">
       <textarea id="text" rows="1" placeholder="Kuch bhi poochho…" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-      <button class="icon-btn" id="micBtn" onclick="toggleMic()" title="Mic">🎤</button>
-      <button id="talkBtn" onclick="toggleTalk()">🔁 Talk</button>
-      <button id="sendBtn" onclick="send()" title="Send">➤</button>
+      <button type="button" class="icon-btn" id="micBtn" onclick="toggleMic()" title="Mic">🎤</button>
+      <button type="button" id="talkBtn" onclick="toggleTalk()">🔁 Talk</button>
+      <button type="button" id="sendBtn" onclick="send()" title="Send">➤</button>
     </div>
     <div class="input-hint">Enter to send · Shift+Enter for new line · 🎤 for voice</div>
   </div>
