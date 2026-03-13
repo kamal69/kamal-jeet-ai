@@ -536,7 +536,7 @@ body {
     </div>
     <div>
       <div class="logo-text">Sarthi AI</div>
-      <div class="logo-sub">Powered by Groq</div>
+      <div class="logo-sub">Powered by Kamal Jeet</div>
     </div>
   </div>
 
@@ -565,7 +565,7 @@ body {
   <div id="topbar">
     <div class="model-badge">
       <div class="model-dot"></div>
-      llama-3.3-70b
+      Online
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
       <button onclick="clearChat()" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'Sora',sans-serif;transition:all 0.15s;" onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">🗑️ Clear</button>
@@ -589,7 +589,7 @@ body {
         </svg>
       </div>
       <div class="welcome-title">Sarthi AI</div>
-      <div class="welcome-sub">Hindi, English, Hinglish — sab samajhta hun. Code likhun, image dikhao, ya baat karein!</div>
+      
       <div class="suggestion-grid">
         <div class="suggestion-card" onclick="suggest('Python mein inheritance kya hota hai?')">
           <strong>💻 Code Seekhein</strong>Python inheritance explain karo
