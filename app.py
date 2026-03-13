@@ -816,8 +816,31 @@ async function send(){
       return;
     }
     addAiMsg(data.reply);
-    // Use browser TTS directly — no server audio needed
-    if(data.audio){ const audio=new Audio('data:audio/mp3;base64,'+data.audio); audio.play(); }
+
+    // Play ElevenLabs audio if available, else browser TTS
+    // After audio ends → restart mic if Talk Mode is ON
+    if(data.audio){
+      if(currentAudio){ currentAudio.pause(); currentAudio=null; }
+      window.speechSynthesis.cancel();
+      const audio = new Audio('data:audio/mp3;base64,'+data.audio);
+      currentAudio = audio;
+      setStatus('🔊 Speaking…');
+      audio.onended = ()=>{
+        currentAudio = null;
+        setStatus('Ready');
+        if(isTalkMode) startListening();
+      };
+      audio.onerror = ()=>{
+        currentAudio = null;
+        speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+      };
+      audio.play().catch(()=>{
+        speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+      });
+    } else {
+      speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+    }
+
   } catch(e){
     const t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
@@ -840,30 +863,52 @@ function speakText(text, onEnd){
 
   if(!clean){ if(onEnd) onEnd(); return; }
 
-  const utter = new SpeechSynthesisUtterance(clean);
-  const isHindi = /[\u0900-\u097F]/.test(clean);
-  const voices  = window.speechSynthesis.getVoices();
+  // Split into short chunks — Android Chrome silently stops on long text
+  const sentences = clean.match(/[^।!?.]+[।!?.]?/g) || [clean];
+  const chunks = [];
+  let cur = '';
+  sentences.forEach(s => {
+    if((cur+s).length > 180){ if(cur) chunks.push(cur.trim()); cur=s; }
+    else cur += s;
+  });
+  if(cur.trim()) chunks.push(cur.trim());
 
-  let voice = null;
-  if(isHindi){
-    voice = voices.find(v => v.lang.startsWith('hi')) || null;
-  } else {
-    voice = voices.find(v => v.lang === 'en-IN')
-         || voices.find(v => v.lang.startsWith('en-IN'))
-         || voices.find(v => v.lang.startsWith('en-US') && v.localService)
-         || voices.find(v => v.lang.startsWith('en'))
-         || null;
+  const voices = window.speechSynthesis.getVoices();
+  let idx = 0;
+
+  // keepAlive: Android Chrome pauses synthesis silently after ~15s
+  const keepAlive = setInterval(()=>{
+    if(!window.speechSynthesis.speaking){ clearInterval(keepAlive); return; }
+    window.speechSynthesis.pause();
+    window.speechSynthesis.resume();
+  }, 10000);
+
+  function speakNext(){
+    if(idx >= chunks.length){
+      clearInterval(keepAlive); setStatus('Ready'); if(onEnd) onEnd(); return;
+    }
+    const utter = new SpeechSynthesisUtterance(chunks[idx++]);
+    const isHindi = /[\u0900-\u097F]/.test(utter.text);
+    let voice = null;
+    if(isHindi){
+      voice = voices.find(v => v.lang.startsWith('hi')) || null;
+    } else {
+      voice = voices.find(v => v.lang === 'en-IN')
+           || voices.find(v => v.lang.startsWith('en-IN'))
+           || voices.find(v => v.lang.startsWith('en-US') && v.localService)
+           || voices.find(v => v.lang.startsWith('en'))
+           || null;
+    }
+    if(voice) utter.voice = voice;
+    utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
+    utter.rate   = 0.92; utter.pitch = 1.0; utter.volume = 1.0;
+    utter.onend  = speakNext;
+    utter.onerror = ()=>{ clearInterval(keepAlive); setStatus('Ready'); if(onEnd) onEnd(); };
+    window.speechSynthesis.speak(utter);
   }
-  if(voice) utter.voice = voice;
-  utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
-  utter.rate   = 0.92;
-  utter.pitch  = 1.0;
-  utter.volume = 1.0;
 
   setStatus('🔊 Speaking…');
-  utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
-  utter.onerror= ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
-  window.speechSynthesis.speak(utter);
+  speakNext();
 }
 
 // Preload voices
