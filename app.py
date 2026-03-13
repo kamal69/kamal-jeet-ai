@@ -841,8 +841,11 @@ async function send(){
 }
 
 // ── Browser TTS (Web Speech API — works on ALL browsers) ──────────
+const synth = window.speechSynthesis || null;
+
 function speakText(text, onEnd){
-  window.speechSynthesis.cancel();
+  if(!synth){ if(onEnd) onEnd(); return; }  // No TTS support — skip silently
+  synth.cancel();
 
   // Clean markdown for speech
   const clean = text
@@ -856,7 +859,7 @@ function speakText(text, onEnd){
 
   const utter = new SpeechSynthesisUtterance(clean);
   const isHindi = /[\u0900-\u097F]/.test(clean);
-  const voices  = window.speechSynthesis.getVoices();
+  const voices  = synth.getVoices();
 
   let voice = null;
   if(isHindi){
@@ -877,12 +880,12 @@ function speakText(text, onEnd){
   setStatus('🔊 Speaking…');
   utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
   utter.onerror= ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
-  window.speechSynthesis.speak(utter);
+  synth.speak(utter);
 }
 
 // Preload voices
-if(window.speechSynthesis.onvoiceschanged !== undefined){
-  window.speechSynthesis.onvoiceschanged = ()=> window.speechSynthesis.getVoices();
+if(synth && synth.onvoiceschanged !== undefined){
+  synth.onvoiceschanged = ()=> synth.getVoices();
 }
 
 function toggleMic(){ if(isListening) stopListening(); else startListening(); }
@@ -914,7 +917,7 @@ function buildRecognition(){
 
 function startListening(){
   if(isListening) return;
-  window.speechSynthesis.cancel(); // Stop speaking before listening
+  if(synth) synth.cancel(); // Stop speaking before listening
   if(currentAudio){currentAudio.pause();currentAudio=null;}
   recognition=buildRecognition(); if(!recognition) return;
   try{ recognition.start(); } catch(e){ console.warn(e); }
