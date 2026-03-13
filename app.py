@@ -54,7 +54,7 @@ HTML = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KJ Master AI</title>
+<title>Sarthi AI</title>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -524,10 +524,21 @@ body {
 <!-- Sidebar -->
 <div id="sidebar">
   <div class="logo">
-    <div class="logo-icon">🤖</div>
+    <div class="logo-icon" style="background:none;padding:0;overflow:visible;">
+      <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+        <rect width="36" height="36" rx="10" fill="#1a1a1a" stroke="#2a2a2a" stroke-width="1"/>
+        <circle cx="18" cy="18" r="10" fill="none" stroke="#c96442" stroke-width="1.5"/>
+        <circle cx="18" cy="18" r="6" fill="#c96442" opacity="0.15"/>
+        <polygon points="18,8 20,14 18,12 16,14" fill="#c96442"/>
+        <polygon points="18,28 20,22 18,24 16,22" fill="#444"/>
+        <polygon points="28,18 22,20 24,18 22,16" fill="#444"/>
+        <polygon points="8,18 14,20 12,18 14,16" fill="#444"/>
+        <circle cx="18" cy="18" r="2.5" fill="#c96442"/>
+      </svg>
+    </div>
     <div>
-      <div class="logo-text">KJ Master AI</div>
-      <div class="logo-sub">Powered by Groq</div>
+      <div class="logo-text">Sarthi AI</div>
+      <div class="logo-sub">Powered by Kamal Jeet</div>
     </div>
   </div>
 
@@ -556,16 +567,30 @@ body {
   <div id="topbar">
     <div class="model-badge">
       <div class="model-dot"></div>
-      llama-3.3-70b
+      Online
     </div>
-    <div id="status-pill">Ready</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button onclick="clearChat()" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'Sora',sans-serif;transition:all 0.15s;" onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">🗑️ Clear</button>
+      <div id="status-pill">Ready</div>
+    </div>
   </div>
 
   <!-- Chat + Welcome -->
   <div id="chat">
     <div id="welcome">
-      <div class="welcome-icon">🤖</div>
-      <div class="welcome-title">KJ Master AI</div>
+      <div class="welcome-icon" style="background:none;border:none;box-shadow:none;">
+        <svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+          <rect width="56" height="56" rx="16" fill="#1a1a1a" stroke="#2a2a2a" stroke-width="1.5"/>
+          <circle cx="28" cy="28" r="16" fill="none" stroke="#c96442" stroke-width="2"/>
+          <circle cx="28" cy="28" r="9" fill="#c96442" opacity="0.15"/>
+          <polygon points="28,12 31,22 28,19 25,22" fill="#c96442"/>
+          <polygon points="28,44 31,34 28,37 25,34" fill="#444"/>
+          <polygon points="44,28 34,31 37,28 34,25" fill="#444"/>
+          <polygon points="12,28 22,31 19,28 22,25" fill="#444"/>
+          <circle cx="28" cy="28" r="4" fill="#c96442"/>
+        </svg>
+      </div>
+      <div class="welcome-title">Sarthi AI</div>
       <div class="welcome-sub">Hindi, English, Hinglish — sab samajhta hun. Code likhun, image dikhao, ya baat karein!</div>
       <div class="suggestion-grid">
         <div class="suggestion-card" onclick="suggest('Python mein inheritance kya hota hai?')">
@@ -624,6 +649,33 @@ function handleKey(e){
 function suggest(text){
   document.getElementById('text').value = text;
   send();
+}
+
+function newChat(){
+  clearChat();
+}
+
+function clearChat(){
+  history=[];
+  document.getElementById('chat').innerHTML='';
+  const w=document.createElement('div');
+  w.id='welcome';
+  w.innerHTML=`
+    <div class="welcome-icon">🤖</div>
+    <div class="welcome-title">KJ Master AI</div>
+    <div class="welcome-sub">Hindi, English, Hinglish — sab samajhta hun.</div>
+    <div class="suggestion-grid">
+      <div class="suggestion-card" onclick="suggest('Python mein inheritance kya hota hai?')"><strong>💻 Code Seekhein</strong>Python inheritance explain karo</div>
+      <div class="suggestion-card" onclick="suggest('Taj Mahal ki image dikhao')"><strong>🖼️ Image Dekho</strong>Taj Mahal dikhao</div>
+      <div class="suggestion-card" onclick="suggest('Aaj ka weather kaisa hai?')"><strong>💬 Baat Karein</strong>Koi bhi sawaal poochho</div>
+      <div class="suggestion-card" onclick="suggest('Mujhe motivate karo')"><strong>✨ Motivation</strong>Motivational quote do</div>
+    </div>`;
+  document.getElementById('chat').appendChild(w);
+  msgCount=0;
+  document.getElementById('currentChatLabel').textContent='New conversation';
+  setStatus('Ready');
+  // Also clear server-side history
+  fetch('/clear', {method:'POST'}).catch(()=>{});
 }
 
 function newChat(){
@@ -721,7 +773,7 @@ function addAiMsg(text){
   const row=document.createElement('div');
   row.className='msg-row';
   row.innerHTML=`
-    <div class="avatar ai-avatar">✦</div>
+    <div class="avatar ai-avatar" style="font-size:13px;font-weight:700;">S</div>
     <div class="bubble">${renderText(text)}</div>`;
   document.getElementById('chat').appendChild(row);
   scrollBottom();
@@ -732,7 +784,7 @@ function addTyping(){
   const row=document.createElement('div');
   row.id='typing'; row.className='msg-row';
   row.innerHTML=`
-    <div class="avatar ai-avatar">✦</div>
+    <div class="avatar ai-avatar" style="font-size:13px;font-weight:700;">S</div>
     <div class="bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
   document.getElementById('chat').appendChild(row);
   scrollBottom();
@@ -956,6 +1008,12 @@ def fetch_image(query):
 @app.route("/")
 def home():
     return render_template_string(HTML)
+
+@app.route("/clear", methods=["POST"])
+def clear():
+    global history
+    history = []
+    return jsonify({"status": "cleared"})
 
 @app.route("/chat", methods=["POST"])
 def chat():
