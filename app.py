@@ -4,10 +4,17 @@ import urllib.request
 import urllib.parse
 import re
 import json
+import asyncio
+import tempfile
 
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 from groq import Groq
+try:
+    import edge_tts
+    EDGE_TTS_AVAILABLE = True
+except ImportError:
+    EDGE_TTS_AVAILABLE = False
 
 load_dotenv()
 
@@ -623,12 +630,14 @@ body {
 let isListening=false, isTalkMode=false, recognition=null, currentAudio=null;
 let msgCount = 0;
 
-// Unlock autoplay
-document.addEventListener('click',()=>{
-  let a=new Audio();
-  a.src="data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";
-  a.play().catch(()=>{});
-},{once:true});
+// Unlock autoplay — Median/Android WebView compatible
+let audioUnlocked=false,audioCtx=null;
+function unlockAudio(){
+  if(audioUnlocked)return;audioUnlocked=true;
+  try{let a=new Audio();a.src="data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";a.volume=0;a.play().catch(()=>{});}catch(e){}
+  try{audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==="suspended")audioCtx.resume();}catch(e){}
+}
+['click','touchstart','touchend','keydown'].forEach(ev=>document.addEventListener(ev,unlockAudio,{once:true}));
 
 function setStatus(m){
   document.getElementById('status-pill').textContent = m;
@@ -830,8 +839,11 @@ async function send(){
       return;
     }
     addAiMsg(data.reply);
-    // Use browser TTS directly — no server audio needed
-    speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+    if(data.audio){
+      playAudio(data.audio,data.reply,()=>{if(isTalkMode)startListening();});
+    }else{
+      speakText(data.reply,()=>{if(isTalkMode)startListening();});
+    }
   } catch(e){
     const t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
@@ -840,50 +852,41 @@ async function send(){
   }
 }
 
-// ── Browser TTS (Web Speech API — works on ALL browsers) ──────────
-function speakText(text, onEnd){
-  window.speechSynthesis.cancel();
+// ── Server Audio Player (Edge TTS / Groq TTS) ────────────────────
+function playAudio(b64,fallbackText,onEnd){
+  try{
+    unlockAudio();
+    const binary=atob(b64),bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const url=URL.createObjectURL(new Blob([bytes],{type:'audio/mpeg'}));
+    if(currentAudio){currentAudio.pause();currentAudio=null;}
+    const audio=new Audio(url);currentAudio=audio;
+    setStatus('🔊 Speaking…');
+    audio.onended=()=>{setStatus('Ready');URL.revokeObjectURL(url);currentAudio=null;if(onEnd)onEnd();};
+    audio.onerror=()=>{URL.revokeObjectURL(url);currentAudio=null;speakText(fallbackText,onEnd);};
+    setTimeout(()=>audio.play().catch(()=>speakText(fallbackText,onEnd)),80);
+  }catch(e){speakText(fallbackText,onEnd);}
+}
 
-  // Clean markdown for speech
-  const clean = text
-    .replace(/```[\s\S]*?```/g, 'code block.')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/[#*_~]/g, '')
-    .trim();
-
-  if(!clean){ if(onEnd) onEnd(); return; }
-
-  const utter = new SpeechSynthesisUtterance(clean);
-  const isHindi = /[\u0900-\u097F]/.test(clean);
-  const voices  = window.speechSynthesis.getVoices();
-
-  let voice = null;
-  if(isHindi){
-    voice = voices.find(v => v.lang.startsWith('hi')) || null;
-  } else {
-    voice = voices.find(v => v.lang === 'en-IN')
-         || voices.find(v => v.lang.startsWith('en-IN'))
-         || voices.find(v => v.lang.startsWith('en-US') && v.localService)
-         || voices.find(v => v.lang.startsWith('en'))
-         || null;
-  }
-  if(voice) utter.voice = voice;
-  utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
-  utter.rate   = 0.92;
-  utter.pitch  = 1.0;
-  utter.volume = 1.0;
-
+// ── Browser TTS (last resort fallback) ───────────────────────────
+const synth=window.speechSynthesis||null;
+function speakText(text,onEnd){
+  if(!synth){if(onEnd)onEnd();return;}
+  synth.cancel();
+  const clean=text.replace(/```[\s\S]*?```/g,'code block.').replace(/\*\*(.*?)\*\*/g,'$1').replace(/`([^`]+)`/g,'$1').replace(/[#*_~]/g,'').trim();
+  if(!clean){if(onEnd)onEnd();return;}
+  const utter=new SpeechSynthesisUtterance(clean);
+  const isHindi=/[\u0900-\u097F]/.test(clean);
+  const voices=synth.getVoices();
+  let voice=isHindi?voices.find(v=>v.lang.startsWith('hi')):(voices.find(v=>v.lang==='en-IN')||voices.find(v=>v.lang.startsWith('en-IN'))||voices.find(v=>v.lang.startsWith('en'))||null);
+  if(voice)utter.voice=voice;
+  utter.lang=isHindi?'hi-IN':'en-IN';utter.rate=0.92;utter.pitch=1.0;utter.volume=1.0;
   setStatus('🔊 Speaking…');
-  utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
-  utter.onerror= ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
-  window.speechSynthesis.speak(utter);
+  utter.onend=()=>{setStatus('Ready');if(onEnd)onEnd();};
+  utter.onerror=()=>{setStatus('Ready');if(onEnd)onEnd();};
+  synth.speak(utter);
 }
-
-// Preload voices
-if(window.speechSynthesis.onvoiceschanged !== undefined){
-  window.speechSynthesis.onvoiceschanged = ()=> window.speechSynthesis.getVoices();
-}
+if(synth&&synth.onvoiceschanged!==undefined)synth.onvoiceschanged=()=>synth.getVoices();
 
 function toggleMic(){ if(isListening) stopListening(); else startListening(); }
 
@@ -914,7 +917,7 @@ function buildRecognition(){
 
 function startListening(){
   if(isListening) return;
-  window.speechSynthesis.cancel(); // Stop speaking before listening
+  if(synth)synth.cancel();
   if(currentAudio){currentAudio.pause();currentAudio=null;}
   recognition=buildRecognition(); if(!recognition) return;
   try{ recognition.start(); } catch(e){ console.warn(e); }
@@ -966,6 +969,37 @@ def run_tts(text, lang):
         except Exception as e2:
             print("Groq TTS Fallback ERROR:", e2)
             return None
+
+
+# ── Edge TTS — Free, Unlimited, Human-like ────────────────────────
+def run_edge_tts(text, lang):
+    if not EDGE_TTS_AVAILABLE:
+        return None
+    try:
+        voice = "hi-IN-SwaraNeural" if lang == "hi" else "en-IN-NeerjaNeural"
+        async def _synth():
+            tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+            tmp_path = tmp.name
+            tmp.close()
+            communicate = edge_tts.Communicate(text, voice)
+            await communicate.save(tmp_path)
+            with open(tmp_path, "rb") as f:
+                data = f.read()
+            os.unlink(tmp_path)
+            return base64.b64encode(data).decode()
+        try:
+            return asyncio.run(_synth())
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(_synth())
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+    except Exception as e:
+        print("Edge TTS ERROR:", e)
+        return None
 
 # ── Image fetch ───────────────────────────────────────────────────
 HEADERS = {"User-Agent": "KJMasterAI/2.0 (educational project)"}
@@ -1083,8 +1117,17 @@ def chat():
         img   = fetch_image(query)
         return jsonify({"type": "image", "image_url": img or "", "query": query})
 
-    # Browser Web Speech API handles TTS — no server audio needed
-    return jsonify({"reply": reply})
+    # Clean markdown for TTS
+    tts_text = re.sub(r'```[\s\S]*?```', 'code block.', reply)
+    tts_text = re.sub(r'\*\*(.*?)\*\*', r'\1', tts_text)
+    tts_text = re.sub(r'`([^`]+)`', r'\1', tts_text)
+    tts_text = re.sub(r'[#*_~]', '', tts_text).strip()
+    audio_b64 = None
+    if tts_text:
+        audio_b64 = run_edge_tts(tts_text, lang)
+        if not audio_b64:
+            audio_b64 = run_tts(tts_text, lang)
+    return jsonify({"reply": reply, "audio": audio_b64, "lang": lang})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
