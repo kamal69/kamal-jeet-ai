@@ -460,6 +460,8 @@ body {
   font-size: 16px;
   transition: all 0.17s;
   flex-shrink: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 #sendBtn:hover { background: var(--accent2); transform: scale(1.05); }
 #sendBtn:active { transform: scale(0.97); }
@@ -498,8 +500,30 @@ body {
 @media(max-width: 640px){
   #sidebar { display: none; }
   .msg-row { padding: 12px 14px; }
-  .input-box { border-radius: 12px; }
-  #input-area { padding: 12px 14px 16px; }
+  #input-area { padding: 12px 10px 16px; }
+
+  .input-box {
+    border-radius: 12px;
+    padding: 8px 8px;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  /* Hide talkBtn on mobile — frees up space for send button */
+  #talkBtn { display: none; }
+
+  /* Bigger tap targets for mic and send on mobile */
+  .icon-btn, #sendBtn {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+    flex-shrink: 0;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent iOS from zooming in when tapping the textarea */
+  #text { font-size: 16px; min-width: 0; }
 }
 </style>
 </head>
@@ -597,9 +621,9 @@ body {
   <div id="input-area">
     <div class="input-box">
       <textarea id="text" rows="1" placeholder="Kuch bhi poochho…" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-      <button class="icon-btn" id="micBtn" onclick="toggleMic()" title="Mic">🎤</button>
-      <button id="talkBtn" onclick="toggleTalk()">🔁 Talk</button>
-      <button id="sendBtn" onclick="send()" title="Send">➤</button>
+      <button type="button" class="icon-btn" id="micBtn" onclick="toggleMic()" title="Mic">🎤</button>
+      <button type="button" id="talkBtn" onclick="toggleTalk()">🔁 Talk</button>
+      <button type="button" id="sendBtn" onclick="send()" title="Send">➤</button>
     </div>
     <div class="input-hint">Enter to send · Shift+Enter for new line · 🎤 for voice</div>
   </div>
@@ -608,13 +632,26 @@ body {
 <script>
 let isListening=false, isTalkMode=false, recognition=null, currentAudio=null;
 let msgCount = 0;
+let audioUnlocked = false;
 
-// Unlock autoplay
-document.addEventListener('click',()=>{
-  let a=new Audio();
-  a.src="data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";
+// ── iOS/Android autoplay unlock ──
+// Mobile browsers REQUIRE audio to be triggered inside a direct user gesture.
+// We unlock by creating + resuming an AudioContext on first tap/click.
+function unlockAudio(){
+  if(audioUnlocked) return;
+  audioUnlocked = true;
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume().then(()=>{ ctx.close(); });
+  } catch(e){}
+  // Also pre-play a silent mp3 so <Audio> tags are unlocked too
+  const a = new Audio();
+  a.src = "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";
+  a.volume = 0;
   a.play().catch(()=>{});
-},{once:true});
+}
+document.addEventListener('touchstart', unlockAudio, {once:true});
+document.addEventListener('click',      unlockAudio, {once:true});
 
 function setStatus(m){
   document.getElementById('status-pill').textContent = m;
@@ -816,8 +853,35 @@ async function send(){
       return;
     }
     addAiMsg(data.reply);
-    // Use browser TTS directly — no server audio needed
-    if(data.audio){ const audio=new Audio('data:audio/mp3;base64,'+data.audio); audio.play(); }
+
+    // ── FIX 1: Play ElevenLabs audio if available, else use browser TTS ──
+    if(data.audio){
+      // Stop any previous audio
+      if(currentAudio){ currentAudio.pause(); currentAudio=null; }
+      window.speechSynthesis.cancel();
+      const audio = new Audio('data:audio/mp3;base64,'+data.audio);
+      currentAudio = audio;
+      setStatus('🔊 Speaking…');
+      audio.onended = ()=>{
+        currentAudio = null;
+        setStatus('Ready');
+        // ── FIX 2: Resume listening after speaking in Talk Mode ──
+        if(isTalkMode) startListening();
+      };
+      audio.onerror = ()=>{
+        currentAudio = null;
+        // Fallback to browser TTS if ElevenLabs audio fails
+        speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+      };
+      audio.play().catch(()=>{
+        // Autoplay blocked — fallback to browser TTS
+        speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+      });
+    } else {
+      // No ElevenLabs audio — use browser TTS
+      speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+    }
+
   } catch(e){
     const t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
@@ -826,11 +890,10 @@ async function send(){
   }
 }
 
-// ── Browser TTS (Web Speech API — works on ALL browsers) ──────────
+// ── Browser TTS (Web Speech API) ──────────
 function speakText(text, onEnd){
   window.speechSynthesis.cancel();
 
-  // Clean markdown for speech
   const clean = text
     .replace(/```[\s\S]*?```/g, 'code block.')
     .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -840,30 +903,53 @@ function speakText(text, onEnd){
 
   if(!clean){ if(onEnd) onEnd(); return; }
 
-  const utter = new SpeechSynthesisUtterance(clean);
-  const isHindi = /[\u0900-\u097F]/.test(clean);
-  const voices  = window.speechSynthesis.getVoices();
-
-  let voice = null;
-  if(isHindi){
-    voice = voices.find(v => v.lang.startsWith('hi')) || null;
-  } else {
-    voice = voices.find(v => v.lang === 'en-IN')
-         || voices.find(v => v.lang.startsWith('en-IN'))
-         || voices.find(v => v.lang.startsWith('en-US') && v.localService)
-         || voices.find(v => v.lang.startsWith('en'))
-         || null;
+  // ── Android Chrome bug: speechSynthesis silently stops on long text ──
+  // Fix: split into shorter sentences and speak them one by one.
+  const sentences = clean.match(/[^।।!?.]+[।।!?.]?/g) || [clean];
+  const chunks = [];
+  let current = '';
+  for(const s of sentences){
+    if((current + s).length > 180){ if(current) chunks.push(current.trim()); current = s; }
+    else current += s;
   }
-  if(voice) utter.voice = voice;
-  utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
-  utter.rate   = 0.92;
-  utter.pitch  = 1.0;
-  utter.volume = 1.0;
+  if(current.trim()) chunks.push(current.trim());
+
+  const voices = window.speechSynthesis.getVoices();
+  let chunkIndex = 0;
+
+  function speakChunk(){
+    if(chunkIndex >= chunks.length){ setStatus('Ready'); if(onEnd) onEnd(); return; }
+    const utter = new SpeechSynthesisUtterance(chunks[chunkIndex++]);
+    const isHindi = /[\u0900-\u097F]/.test(utter.text);
+    let voice = null;
+    if(isHindi){
+      voice = voices.find(v => v.lang.startsWith('hi')) || null;
+    } else {
+      voice = voices.find(v => v.lang === 'en-IN')
+           || voices.find(v => v.lang.startsWith('en-IN'))
+           || voices.find(v => v.lang.startsWith('en-US') && v.localService)
+           || voices.find(v => v.lang.startsWith('en'))
+           || null;
+    }
+    if(voice) utter.voice = voice;
+    utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
+    utter.rate   = 0.92;
+    utter.pitch  = 1.0;
+    utter.volume = 1.0;
+    utter.onend  = speakChunk;
+    utter.onerror = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
+    window.speechSynthesis.speak(utter);
+  }
+
+  // Android Chrome keepAlive: speechSynthesis pauses after ~15s without this
+  const keepAlive = setInterval(()=>{
+    if(!window.speechSynthesis.speaking){ clearInterval(keepAlive); return; }
+    window.speechSynthesis.pause();
+    window.speechSynthesis.resume();
+  }, 12000);
 
   setStatus('🔊 Speaking…');
-  utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
-  utter.onerror= ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
-  window.speechSynthesis.speak(utter);
+  speakChunk();
 }
 
 // Preload voices
@@ -887,23 +973,69 @@ function toggleTalk(){
 }
 
 function buildRecognition(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ alert('Chrome use karein mic ke liye!'); return null; }
-  const r=new SR();
-  r.lang='hi-IN'; r.interimResults=false; r.maxAlternatives=1;
-  r.onstart=()=>{ isListening=true; document.getElementById('micBtn').classList.add('active'); setStatus('🎙️ Listening…'); };
-  r.onresult=(e)=>{ const t=e.results[0][0].transcript; document.getElementById('text').value=t; stopListening(); send(); };
-  r.onerror=(e)=>{ stopListening(); setStatus('Mic error: '+e.error); };
-  r.onend=()=>{ stopListening(); };
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    // iOS Safari does NOT support SpeechRecognition
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if(isIOS){
+      setStatus('❌ iOS Safari mic support nahi hai. Chrome use karein.');
+      alert('iOS Safari mein voice nahi chalta.\nPlease Chrome browser use karein ya text type karein.');
+    } else {
+      alert('Yeh browser mic support nahi karta. Chrome use karein!');
+    }
+    return null;
+  }
+  const r = new SR();
+  r.lang = 'hi-IN';
+  r.interimResults = false;
+  r.maxAlternatives = 1;
+  r.continuous = false; // IMPORTANT: true causes issues on Android Chrome
+
+  r.onstart = ()=>{
+    isListening = true;
+    document.getElementById('micBtn').classList.add('active');
+    setStatus('🎙️ Listening…');
+  };
+
+  r.onresult = (e)=>{
+    const t = e.results[0][0].transcript;
+    document.getElementById('text').value = t;
+    stopListening();
+    send();
+  };
+
+  r.onerror = (e)=>{
+    stopListening();
+    if(e.error === 'not-allowed'){
+      setStatus('❌ Mic permission denied');
+      alert('Mic ki permission do:\nSettings > Browser > Microphone > Allow');
+    } else if(e.error === 'network'){
+      setStatus('❌ Network error - retry kar');
+      // On mobile, network errors are common — auto-retry in talk mode
+      if(isTalkMode) setTimeout(()=> startListening(), 1500);
+    } else {
+      setStatus('Mic error: ' + e.error);
+    }
+  };
+
+  r.onend = ()=>{ stopListening(); };
+
   return r;
 }
 
 function startListening(){
   if(isListening) return;
-  window.speechSynthesis.cancel(); // Stop speaking before listening
-  if(currentAudio){currentAudio.pause();currentAudio=null;}
-  recognition=buildRecognition(); if(!recognition) return;
-  try{ recognition.start(); } catch(e){ console.warn(e); }
+  window.speechSynthesis.cancel();
+  if(currentAudio){ currentAudio.pause(); currentAudio=null; }
+  // On mobile (especially Android Chrome), calling recognition.start() immediately
+  // after audio ends causes a silent failure. A short delay fixes this.
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const delay = isMobile ? 400 : 0;
+  setTimeout(()=>{
+    recognition = buildRecognition();
+    if(!recognition) return;
+    try{ recognition.start(); } catch(e){ console.warn('recognition.start error:', e); }
+  }, delay);
 }
 
 function stopListening(){
