@@ -1,6 +1,5 @@
 import os
 import base64
-import asyncio
 import urllib.request
 import urllib.parse
 import re
@@ -9,7 +8,6 @@ import json
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 from groq import Groq
-import edge_tts
 
 load_dotenv()
 
@@ -538,7 +536,7 @@ body {
     </div>
     <div>
       <div class="logo-text">Sarthi AI</div>
-      <div class="logo-sub">Powered by Kamal Jeet</div>
+      <div class="logo-sub">Powered by Groq</div>
     </div>
   </div>
 
@@ -567,7 +565,7 @@ body {
   <div id="topbar">
     <div class="model-badge">
       <div class="model-dot"></div>
-      Online
+      llama-3.3-70b
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
       <button onclick="clearChat()" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'Sora',sans-serif;transition:all 0.15s;" onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">🗑️ Clear</button>
@@ -903,25 +901,37 @@ def detect_lang(text):
     hindi = "अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह"
     return "hi" if sum(1 for c in text if c in hindi) > 2 else "en"
 
-# ── TTS ───────────────────────────────────────────────────────────
-async def generate_voice(text, lang):
-    voice = "hi-IN-SwaraNeural" if lang == "hi" else "en-US-JennyNeural"
-    communicate = edge_tts.Communicate(text, voice)
-    audio = b""
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio += chunk["data"]
-    return audio
-
+# ── TTS via Groq ──────────────────────────────────────────────────
 def run_tts(text, lang):
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        audio_bytes = loop.run_until_complete(generate_voice(text, lang))
+        # Groq TTS voices
+        # Hindi → Arista-PlayAI (clear female voice)
+        # English → Fritz-PlayAI (clear male voice)
+        voice = "Arista-PlayAI" if lang == "hi" else "Fritz-PlayAI"
+
+        response = client.audio.speech.create(
+            model = "playai-tts",
+            voice = voice,
+            input = text,
+            response_format = "mp3"
+        )
+        audio_bytes = response.read()
         return base64.b64encode(audio_bytes).decode()
     except Exception as e:
-        print("TTS ERROR:", e)
-        return None
+        print("Groq TTS ERROR:", e)
+        # Fallback: try English voice if Hindi fails
+        try:
+            response = client.audio.speech.create(
+                model = "playai-tts",
+                voice = "Fritz-PlayAI",
+                input = text,
+                response_format = "mp3"
+            )
+            audio_bytes = response.read()
+            return base64.b64encode(audio_bytes).decode()
+        except Exception as e2:
+            print("Groq TTS Fallback ERROR:", e2)
+            return None
 
 # ── Image fetch ───────────────────────────────────────────────────
 HEADERS = {"User-Agent": "KJMasterAI/2.0 (educational project)"}
