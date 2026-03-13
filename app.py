@@ -830,12 +830,8 @@ async function send(){
       return;
     }
     addAiMsg(data.reply);
-    if(data.audio){
-      playAudio(data.audio,()=>{ if(isTalkMode) startListening(); });
-    } else {
-      setStatus('Ready');
-      if(isTalkMode) startListening();
-    }
+    // Use browser TTS directly — no server audio needed
+    speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
   } catch(e){
     const t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
@@ -844,12 +840,49 @@ async function send(){
   }
 }
 
-function playAudio(b64,onEnd){
-  if(currentAudio){currentAudio.pause();currentAudio=null;}
-  const audio=new Audio('data:audio/mp3;base64,'+b64);
-  currentAudio=audio; setStatus('🔊 Speaking…');
-  audio.play().catch(e=>{ setStatus('Ready'); if(onEnd) onEnd(); });
-  audio.onended=()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
+// ── Browser TTS (Web Speech API — works on ALL browsers) ──────────
+function speakText(text, onEnd){
+  window.speechSynthesis.cancel();
+
+  // Clean markdown for speech
+  const clean = text
+    .replace(/```[\s\S]*?```/g, 'code block.')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/[#*_~]/g, '')
+    .trim();
+
+  if(!clean){ if(onEnd) onEnd(); return; }
+
+  const utter = new SpeechSynthesisUtterance(clean);
+  const isHindi = /[\u0900-\u097F]/.test(clean);
+  const voices  = window.speechSynthesis.getVoices();
+
+  let voice = null;
+  if(isHindi){
+    voice = voices.find(v => v.lang.startsWith('hi')) || null;
+  } else {
+    voice = voices.find(v => v.lang === 'en-IN')
+         || voices.find(v => v.lang.startsWith('en-IN'))
+         || voices.find(v => v.lang.startsWith('en-US') && v.localService)
+         || voices.find(v => v.lang.startsWith('en'))
+         || null;
+  }
+  if(voice) utter.voice = voice;
+  utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
+  utter.rate   = 0.92;
+  utter.pitch  = 1.0;
+  utter.volume = 1.0;
+
+  setStatus('🔊 Speaking…');
+  utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
+  utter.onerror= ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
+  window.speechSynthesis.speak(utter);
+}
+
+// Preload voices
+if(window.speechSynthesis.onvoiceschanged !== undefined){
+  window.speechSynthesis.onvoiceschanged = ()=> window.speechSynthesis.getVoices();
 }
 
 function toggleMic(){ if(isListening) stopListening(); else startListening(); }
@@ -881,6 +914,7 @@ function buildRecognition(){
 
 function startListening(){
   if(isListening) return;
+  window.speechSynthesis.cancel(); // Stop speaking before listening
   if(currentAudio){currentAudio.pause();currentAudio=null;}
   recognition=buildRecognition(); if(!recognition) return;
   try{ recognition.start(); } catch(e){ console.warn(e); }
@@ -1049,8 +1083,8 @@ def chat():
         img   = fetch_image(query)
         return jsonify({"type": "image", "image_url": img or "", "query": query})
 
-    audio = run_tts(reply, lang)
-    return jsonify({"reply": reply, "audio": audio})
+    # Browser Web Speech API handles TTS — no server audio needed
+    return jsonify({"reply": reply})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
