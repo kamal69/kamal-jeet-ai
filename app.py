@@ -4,19 +4,14 @@ import urllib.request
 import urllib.parse
 import re
 import json
-import asyncio
-import tempfile
 
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 from groq import Groq
-try:
-    import edge_tts
-    EDGE_TTS_AVAILABLE = True
-except ImportError:
-    EDGE_TTS_AVAILABLE = False
 
 load_dotenv()
+
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 
 app = Flask(__name__)
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -51,6 +46,12 @@ User: tiger dikhao          -> Reply: [IMAGE:tiger]
 User: apple image           -> Reply: [IMAGE:apple]
 User: Indian flag dikhao    -> Reply: [IMAGE:Indian flag]
 User: Taj Mahal             -> Reply: [IMAGE:Taj Mahal]
+
+REAL-TIME DATA:
+You have access to real-time web search for current information.
+When asked about current events, prices, weather, news, population,
+scores, or anything time-sensitive — use the provided web data to answer accurately.
+Never say "I don't know current data" if web data is provided to you.
 """
 
 HTML = """
@@ -630,14 +631,12 @@ body {
 let isListening=false, isTalkMode=false, recognition=null, currentAudio=null;
 let msgCount = 0;
 
-// Unlock autoplay — Median/Android WebView compatible
-let audioUnlocked=false,audioCtx=null;
-function unlockAudio(){
-  if(audioUnlocked)return;audioUnlocked=true;
-  try{let a=new Audio();a.src="data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";a.volume=0;a.play().catch(()=>{});}catch(e){}
-  try{audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==="suspended")audioCtx.resume();}catch(e){}
-}
-['click','touchstart','touchend','keydown'].forEach(ev=>document.addEventListener(ev,unlockAudio,{once:true}));
+// Unlock autoplay
+document.addEventListener('click',()=>{
+  let a=new Audio();
+  a.src="data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";
+  a.play().catch(()=>{});
+},{once:true});
 
 function setStatus(m){
   document.getElementById('status-pill').textContent = m;
@@ -839,11 +838,8 @@ async function send(){
       return;
     }
     addAiMsg(data.reply);
-    if(data.audio){
-      playAudio(data.audio,data.reply,()=>{if(isTalkMode)startListening();});
-    }else{
-      speakText(data.reply,()=>{if(isTalkMode)startListening();});
-    }
+    // Use browser TTS directly — no server audio needed
+    speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
   } catch(e){
     const t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
@@ -852,41 +848,50 @@ async function send(){
   }
 }
 
-// ── Server Audio Player (Edge TTS / Groq TTS) ────────────────────
-function playAudio(b64,fallbackText,onEnd){
-  try{
-    unlockAudio();
-    const binary=atob(b64),bytes=new Uint8Array(binary.length);
-    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-    const url=URL.createObjectURL(new Blob([bytes],{type:'audio/mpeg'}));
-    if(currentAudio){currentAudio.pause();currentAudio=null;}
-    const audio=new Audio(url);currentAudio=audio;
-    setStatus('🔊 Speaking…');
-    audio.onended=()=>{setStatus('Ready');URL.revokeObjectURL(url);currentAudio=null;if(onEnd)onEnd();};
-    audio.onerror=()=>{URL.revokeObjectURL(url);currentAudio=null;speakText(fallbackText,onEnd);};
-    setTimeout(()=>audio.play().catch(()=>speakText(fallbackText,onEnd)),80);
-  }catch(e){speakText(fallbackText,onEnd);}
+// ── Browser TTS (Web Speech API — works on ALL browsers) ──────────
+function speakText(text, onEnd){
+  window.speechSynthesis.cancel();
+
+  // Clean markdown for speech
+  const clean = text
+    .replace(/```[\s\S]*?```/g, 'code block.')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/[#*_~]/g, '')
+    .trim();
+
+  if(!clean){ if(onEnd) onEnd(); return; }
+
+  const utter = new SpeechSynthesisUtterance(clean);
+  const isHindi = /[\u0900-\u097F]/.test(clean);
+  const voices  = window.speechSynthesis.getVoices();
+
+  let voice = null;
+  if(isHindi){
+    voice = voices.find(v => v.lang.startsWith('hi')) || null;
+  } else {
+    voice = voices.find(v => v.lang === 'en-IN')
+         || voices.find(v => v.lang.startsWith('en-IN'))
+         || voices.find(v => v.lang.startsWith('en-US') && v.localService)
+         || voices.find(v => v.lang.startsWith('en'))
+         || null;
+  }
+  if(voice) utter.voice = voice;
+  utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
+  utter.rate   = 0.92;
+  utter.pitch  = 1.0;
+  utter.volume = 1.0;
+
+  setStatus('🔊 Speaking…');
+  utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
+  utter.onerror= ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
+  window.speechSynthesis.speak(utter);
 }
 
-// ── Browser TTS (last resort fallback) ───────────────────────────
-const synth=window.speechSynthesis||null;
-function speakText(text,onEnd){
-  if(!synth){if(onEnd)onEnd();return;}
-  synth.cancel();
-  const clean=text.replace(/```[\s\S]*?```/g,'code block.').replace(/\*\*(.*?)\*\*/g,'$1').replace(/`([^`]+)`/g,'$1').replace(/[#*_~]/g,'').trim();
-  if(!clean){if(onEnd)onEnd();return;}
-  const utter=new SpeechSynthesisUtterance(clean);
-  const isHindi=/[\u0900-\u097F]/.test(clean);
-  const voices=synth.getVoices();
-  let voice=isHindi?voices.find(v=>v.lang.startsWith('hi')):(voices.find(v=>v.lang==='en-IN')||voices.find(v=>v.lang.startsWith('en-IN'))||voices.find(v=>v.lang.startsWith('en'))||null);
-  if(voice)utter.voice=voice;
-  utter.lang=isHindi?'hi-IN':'en-IN';utter.rate=0.92;utter.pitch=1.0;utter.volume=1.0;
-  setStatus('🔊 Speaking…');
-  utter.onend=()=>{setStatus('Ready');if(onEnd)onEnd();};
-  utter.onerror=()=>{setStatus('Ready');if(onEnd)onEnd();};
-  synth.speak(utter);
+// Preload voices
+if(window.speechSynthesis.onvoiceschanged !== undefined){
+  window.speechSynthesis.onvoiceschanged = ()=> window.speechSynthesis.getVoices();
 }
-if(synth&&synth.onvoiceschanged!==undefined)synth.onvoiceschanged=()=>synth.getVoices();
 
 function toggleMic(){ if(isListening) stopListening(); else startListening(); }
 
@@ -917,7 +922,7 @@ function buildRecognition(){
 
 function startListening(){
   if(isListening) return;
-  if(synth)synth.cancel();
+  window.speechSynthesis.cancel(); // Stop speaking before listening
   if(currentAudio){currentAudio.pause();currentAudio=null;}
   recognition=buildRecognition(); if(!recognition) return;
   try{ recognition.start(); } catch(e){ console.warn(e); }
@@ -935,19 +940,61 @@ function stopListening(){
 
 # ── Language detection ────────────────────────────────────────────
 def detect_lang(text):
-    # Hindi Unicode script check
-    hindi_chars = "अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह"
-    if sum(1 for ch in text if ch in hindi_chars) > 2:
-        return "hi"
-    # Hinglish detection (Roman Hindi words) — use Hindi/Swara voice
-    hinglish = {"kya","hai","hain","nahi","nhi","aap","tum","main","mein",
-                "mujhe","karo","karna","bhi","sirf","lekin","aur","yeh","woh",
-                "accha","theek","bilkul","bhai","yaar","kaise","kyun","kab",
-                "bahut","bohot","thoda","zyada","dekho","suno","chalo","abhi",
-                "phir","matlab","seedha","ho","hun","hoga","hogi","kar","bolo"}
-    if len(set(text.lower().split()) & hinglish) >= 2:
-        return "hi"
-    return "en"
+    hindi = "अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह"
+    return "hi" if sum(1 for c in text if c in hindi) > 2 else "en"
+
+
+# ── Web Search via Tavily (real-time data) ────────────────────────
+def web_search(query, max_results=3):
+    """Search the web using Tavily API for real-time information."""
+    if not TAVILY_API_KEY:
+        return None
+    try:
+        payload = json.dumps({
+            "api_key": TAVILY_API_KEY,
+            "query": query,
+            "search_depth": "basic",
+            "max_results": max_results,
+            "include_answer": True
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.tavily.com/search",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode())
+            # Return direct answer if available
+            answer = data.get("answer", "")
+            results = data.get("results", [])
+            if answer:
+                return answer
+            # Fallback: combine top result snippets
+            snippets = [r.get("content", "")[:300] for r in results[:2] if r.get("content")]
+            return " ".join(snippets) if snippets else None
+    except Exception as e:
+        print("Web search ERROR:", e)
+        return None
+
+# ── Check if query needs real-time data ──────────────────────────
+def needs_web_search(text):
+    """Detect if user is asking about current/latest/real-time info."""
+    keywords = [
+        # English
+        "current", "latest", "today", "now", "live", "real-time", "realtime",
+        "right now", "at the moment", "this year", "2024", "2025", "2026",
+        "news", "update", "recent", "new", "price", "rate", "score",
+        "weather", "stock", "population", "government", "election", "match",
+        # Hindi
+        "aaj", "abhi", "haal", "taaza", "nayi", "naya", "khabar",
+        "mausam", "chunav", "sarkar", "bhav", "daam", "score",
+        "kitni", "kitna", "population", "jansankhya",
+        # Hinglish
+        "latest news", "abhi kya", "aaj ka", "current price",
+    ]
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in keywords)
 
 # ── TTS via Groq ──────────────────────────────────────────────────
 def run_tts(text, lang):
@@ -980,39 +1027,6 @@ def run_tts(text, lang):
         except Exception as e2:
             print("Groq TTS Fallback ERROR:", e2)
             return None
-
-
-# ── Edge TTS — Free, Unlimited, Human-like ────────────────────────
-# Hindi/Hinglish: hi-IN-SwaraNeural (natural female)
-# English: en-IN-NeerjaExpressiveNeural (expressive Indian female)
-def run_edge_tts(text, lang):
-    if not EDGE_TTS_AVAILABLE:
-        return None
-    try:
-        voice = "hi-IN-SwaraNeural" if lang == "hi" else "en-IN-NeerjaExpressiveNeural"
-        async def _synth():
-            tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-            tmp_path = tmp.name
-            tmp.close()
-            communicate = edge_tts.Communicate(text, voice)
-            await communicate.save(tmp_path)
-            with open(tmp_path, "rb") as f:
-                data = f.read()
-            os.unlink(tmp_path)
-            return base64.b64encode(data).decode()
-        try:
-            return asyncio.run(_synth())
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(_synth())
-            finally:
-                loop.close()
-                asyncio.set_event_loop(None)
-    except Exception as e:
-        print("Edge TTS ERROR:", e)
-        return None
 
 # ── Image fetch ───────────────────────────────────────────────────
 HEADERS = {"User-Agent": "KJMasterAI/2.0 (educational project)"}
@@ -1114,9 +1128,21 @@ def chat():
 
     history.append({"role": "user", "content": msg})
 
+    # Inject real-time web data if query needs it
+    messages_with_context = [{"role": "system", "content": SYSTEM}] + history
+    if needs_web_search(msg):
+        search_result = web_search(msg)
+        if search_result:
+            # Inject search result as system context
+            realtime_ctx = {
+                "role": "system",
+                "content": f"REAL-TIME WEB DATA (use this to answer accurately):\n{search_result}\n\nAnswer the user using this latest information."
+            }
+            messages_with_context = [{"role": "system", "content": SYSTEM}, realtime_ctx] + history
+
     resp = client.chat.completions.create(
         model       = "llama-3.3-70b-versatile",
-        messages    = [{"role": "system", "content": SYSTEM}] + history,
+        messages    = messages_with_context,
         max_tokens  = 300,
         temperature = 0.7
     )
@@ -1130,17 +1156,8 @@ def chat():
         img   = fetch_image(query)
         return jsonify({"type": "image", "image_url": img or "", "query": query})
 
-    # Clean markdown for TTS
-    tts_text = re.sub(r'```[\s\S]*?```', 'code block.', reply)
-    tts_text = re.sub(r'\*\*(.*?)\*\*', r'\1', tts_text)
-    tts_text = re.sub(r'`([^`]+)`', r'\1', tts_text)
-    tts_text = re.sub(r'[#*_~]', '', tts_text).strip()
-    audio_b64 = None
-    if tts_text:
-        audio_b64 = run_edge_tts(tts_text, lang)   # 1st: Edge TTS (human-like)
-        if not audio_b64:
-            audio_b64 = run_tts(tts_text, lang)     # 2nd: Groq fallback
-    return jsonify({"reply": reply, "audio": audio_b64, "lang": lang})
+    # Browser Web Speech API handles TTS — no server audio needed
+    return jsonify({"reply": reply})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
