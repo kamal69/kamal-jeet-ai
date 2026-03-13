@@ -830,8 +830,12 @@ async function send(){
       return;
     }
     addAiMsg(data.reply);
-    // Use browser TTS directly — no server audio needed
-    speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+    // Try Groq TTS audio first; fallback to browser TTS if unavailable
+    if(data.audio){
+      playGroqAudio(data.audio, data.reply, ()=>{ if(isTalkMode) startListening(); });
+    } else {
+      speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+    }
   } catch(e){
     const t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
@@ -840,14 +844,43 @@ async function send(){
   }
 }
 
-// ── Browser TTS (Web Speech API — works on ALL browsers) ──────────
+// ── Groq TTS (primary — natural Arista-PlayAI / Fritz-PlayAI voice) ──
+function playGroqAudio(b64, fallbackText, onEnd){
+  try{
+    const binary = atob(b64);
+    const bytes  = new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+    const blob = new Blob([bytes], {type:'audio/mp3'});
+    const url  = URL.createObjectURL(blob);
+    if(currentAudio){ currentAudio.pause(); currentAudio=null; }
+    currentAudio = new Audio(url);
+    setStatus('🔊 Speaking…');
+    currentAudio.onended = ()=>{
+      setStatus('Ready');
+      URL.revokeObjectURL(url);
+      currentAudio=null;
+      if(onEnd) onEnd();
+    };
+    currentAudio.onerror = ()=>{
+      console.warn('Groq audio error — falling back to browser TTS');
+      URL.revokeObjectURL(url);
+      currentAudio=null;
+      speakText(fallbackText, onEnd);
+    };
+    currentAudio.play().catch(()=>{ speakText(fallbackText, onEnd); });
+  } catch(e){
+    console.warn('Groq audio decode error:', e);
+    speakText(fallbackText, onEnd);
+  }
+}
+
+// ── Browser TTS (fallback — Web Speech API) ───────────────────────
 const synth = window.speechSynthesis || null;
 
 function speakText(text, onEnd){
-  if(!synth){ if(onEnd) onEnd(); return; }  // No TTS support — skip silently
+  if(!synth){ if(onEnd) onEnd(); return; }
   synth.cancel();
 
-  // Clean markdown for speech
   const clean = text
     .replace(/```[\s\S]*?```/g, 'code block.')
     .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -857,7 +890,7 @@ function speakText(text, onEnd){
 
   if(!clean){ if(onEnd) onEnd(); return; }
 
-  const utter = new SpeechSynthesisUtterance(clean);
+  const utter   = new SpeechSynthesisUtterance(clean);
   const isHindi = /[\u0900-\u097F]/.test(clean);
   const voices  = synth.getVoices();
 
@@ -877,7 +910,7 @@ function speakText(text, onEnd){
   utter.pitch  = 1.0;
   utter.volume = 1.0;
 
-  setStatus('🔊 Speaking…');
+  setStatus('🔊 Speaking… (browser)');
   utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
   utter.onerror= ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
   synth.speak(utter);
@@ -1086,8 +1119,14 @@ def chat():
         img   = fetch_image(query)
         return jsonify({"type": "image", "image_url": img or "", "query": query})
 
-    # Browser Web Speech API handles TTS — no server audio needed
-    return jsonify({"reply": reply})
+    # Try Groq TTS for natural voice (Arista-PlayAI for Hindi, Fritz-PlayAI for English)
+    tts_text = re.sub(r'```[\s\S]*?```', 'code block.', reply)
+    tts_text = re.sub(r'\*\*(.*?)\*\*', r'\1', tts_text)
+    tts_text = re.sub(r'`([^`]+)`', r'\1', tts_text)
+    tts_text = re.sub(r'[#*_~]', '', tts_text).strip()
+
+    audio_b64 = run_tts(tts_text, lang) if tts_text else None
+    return jsonify({"reply": reply, "audio": audio_b64, "lang": lang})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
