@@ -816,8 +816,35 @@ async function send(){
       return;
     }
     addAiMsg(data.reply);
-    // Use browser TTS directly — no server audio needed
-    if(data.audio){ const audio=new Audio('data:audio/mp3;base64,'+data.audio); audio.play(); }
+
+    // ── FIX 1: Play ElevenLabs audio if available, else use browser TTS ──
+    if(data.audio){
+      // Stop any previous audio
+      if(currentAudio){ currentAudio.pause(); currentAudio=null; }
+      window.speechSynthesis.cancel();
+      const audio = new Audio('data:audio/mp3;base64,'+data.audio);
+      currentAudio = audio;
+      setStatus('🔊 Speaking…');
+      audio.onended = ()=>{
+        currentAudio = null;
+        setStatus('Ready');
+        // ── FIX 2: Resume listening after speaking in Talk Mode ──
+        if(isTalkMode) startListening();
+      };
+      audio.onerror = ()=>{
+        currentAudio = null;
+        // Fallback to browser TTS if ElevenLabs audio fails
+        speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+      };
+      audio.play().catch(()=>{
+        // Autoplay blocked — fallback to browser TTS
+        speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+      });
+    } else {
+      // No ElevenLabs audio — use browser TTS
+      speakText(data.reply, ()=>{ if(isTalkMode) startListening(); });
+    }
+
   } catch(e){
     const t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
