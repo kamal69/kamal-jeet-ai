@@ -1,6 +1,5 @@
 import os
 import requests
-import json
 import base64
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
@@ -12,7 +11,6 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# API Keys
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
@@ -22,12 +20,6 @@ eleven = ElevenLabs(api_key=ELEVEN_API_KEY)
 
 history = []
 
-SYSTEM = """
-You are Sarthi AI.
-Always use latest internet information provided.
-Reply in same language as user.
-"""
-
 @app.route("/")
 def home():
     return send_from_directory("templates", "index.html")
@@ -35,40 +27,41 @@ def home():
 @app.route("/chat", methods=["POST"])
 def chat():
 
-    global history
+    try:
 
-    data = request.json
-    msg = data.get("message","")
+        data = request.json
+        msg = data.get("message","")
 
-    # Step 1: Internet search
-    search_data = tavily_search(msg)
+        history.append({"role":"user","content":msg})
 
-    history.append({"role":"user","content":msg})
-    history = history[-10:]
+        search_data = tavily_search(msg)
 
-    messages = [
-        {"role":"system","content":SYSTEM},
-        {"role":"system","content":"Latest internet data:\n"+search_data}
-    ] + history
+        messages = [
+            {"role":"system","content":"Use latest internet info"},
+            {"role":"system","content":search_data}
+        ] + history
 
-    # Step 2: AI reasoning
-    resp = groq.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=messages,
-        max_tokens=600
-    )
+        resp = groq.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages
+        )
 
-    reply = resp.choices[0].message.content.strip()
+        reply = resp.choices[0].message.content
 
-    history.append({"role":"assistant","content":reply})
+        history.append({"role":"assistant","content":reply})
 
-    return jsonify({
-        "reply": reply,
-        "audio": tts(reply)
-    })
+        return jsonify({
+            "reply": reply,
+            "audio": voice(reply)
+        })
+
+    except Exception as e:
+
+        print(e)
+
+        return jsonify({"error": str(e)})
 
 
-# Tavily search
 def tavily_search(query):
 
     try:
@@ -76,31 +69,28 @@ def tavily_search(query):
         url = "https://api.tavily.com/search"
 
         payload = {
-            "api_key": TAVILY_API_KEY,
-            "query": query,
-            "search_depth": "advanced",
-            "max_results": 5
+            "api_key":TAVILY_API_KEY,
+            "query":query,
+            "max_results":5
         }
 
         r = requests.post(url,json=payload)
+
         data = r.json()
 
-        results = data.get("results",[])
+        text = ""
 
-        text = []
+        for item in data.get("results",[]):
+            text += item["content"] + "\n\n"
 
-        for item in results:
-            text.append(item["content"])
+        return text
 
-        return "\n\n".join(text)
+    except:
 
-    except Exception as e:
-        print("Search error:",e)
         return ""
 
 
-# Voice output
-def tts(text):
+def voice(text):
 
     try:
 
@@ -119,11 +109,13 @@ def tts(text):
 
         return base64.b64encode(audio_bytes).decode()
 
-    except Exception as e:
-        print("Voice error:",e)
+    except:
+
         return None
 
 
 if __name__ == "__main__":
+
     port = int(os.environ.get("PORT",5000))
+
     app.run(host="0.0.0.0",port=port)
