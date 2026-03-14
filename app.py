@@ -18,16 +18,17 @@ history = []
 SYSTEM = (
     "You are Sarthi AI, a friendly and intelligent assistant. "
     "You understand Hindi, English, and Hinglish fluently. "
-    "VERY IMPORTANT: Reply in the SAME language the user uses — Hindi mein pucho toh Hindi mein jawab do, English mein pucho toh English mein. "
-    "Be conversational, warm, and detailed — like a knowledgeable dost explaining things naturally. "
-    "Do NOT give one-line robotic answers. Give proper explanation with examples. "
-    "Use natural flowing sentences. Avoid unnecessary bullet points. "
-    "OWNER INFO — Only share this if user directly asks 'who made you', 'kisne banaya', 'about creator', 'owner kaun hai' or similar: "
-    "Mujhe Kamal Jeet ne banaya hai. Woh Kullu, Himachal Pradesh se hain, "
-    "unhone MCA ki degree li hai, aur yeh Sarthi AI project unhone apni learning "
-    "aur innovation ki journey ke liye banaya hai. "
+    "VERY IMPORTANT: Reply in the SAME language the user uses. "
+    "If user writes Hinglish (mix of Hindi+English), reply in natural casual Hinglish. "
+    "If user writes pure Hindi, reply in simple everyday Hindi — avoid heavy Sanskrit words like 'sthit', 'smaarak', 'nirman'. "
+    "Use simple words: 'hai' not 'hain', 'banaya' not 'nirmit kiya', 'mein' not 'mein sthit'. "
+    "Be like a knowledgeable dost — warm, natural, detailed with examples. "
+    "Do NOT give one-line answers. Give good explanation naturally. "
+    "OWNER INFO — Only share if directly asked 'who made you', 'kisne banaya', 'owner kaun hai': "
+    "Mujhe Kamal Jeet ne banaya hai jo Kullu, Himachal Pradesh se hain, "
+    "unhone MCA ki hai aur yeh project learning aur innovation ke liye banaya hai. "
     "DO NOT mention owner info unless directly asked. "
-    "For image requests reply ONLY with this exact format: [IMAGE:query]"
+    "For image requests reply ONLY: [IMAGE:query]"
 )
 
 
@@ -160,16 +161,46 @@ def web_search(query):
 
 
 def fetch_image(query):
+    # First try Google CSE image search
+    if GOOGLE_API_KEY and GOOGLE_CSE_ID:
+        try:
+            params = urllib.parse.urlencode({
+                "key":        GOOGLE_API_KEY,
+                "cx":         GOOGLE_CSE_ID,
+                "q":          query,
+                "searchType": "image",
+                "num":        1,
+                "safe":       "active",
+                "imgSize":    "large",
+                "gl":         "in"
+            })
+            url = "https://www.googleapis.com/customsearch/v1?" + params
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                d = json.loads(r.read().decode())
+            items = d.get("items", [])
+            if items:
+                img_url = items[0].get("link", "")
+                if img_url:
+                    print(f"Google Image OK: {img_url}")
+                    return img_url
+        except Exception as e:
+            print("Google Image ERROR: " + str(e))
+
+    # Fallback: Wikipedia
     try:
         url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
             "action": "query", "titles": query,
             "prop": "pageimages", "pithumbsize": 600, "format": "json"
         })
-        with urllib.request.urlopen(url) as r:
+        with urllib.request.urlopen(url, timeout=6) as r:
             d = json.loads(r.read().decode())
         for page in d["query"]["pages"].values():
-            if "thumbnail" in page: return page["thumbnail"]["source"]
-    except: pass
+            if "thumbnail" in page:
+                return page["thumbnail"]["source"]
+    except Exception as e:
+        print("Wikipedia Image ERROR: " + str(e))
+
     return None
 
 
