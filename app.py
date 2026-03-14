@@ -285,7 +285,8 @@ body {
   flex: 1; background: none; border: none; outline: none;
   color: var(--text); font-family: 'Sora', sans-serif;
   font-size: 14px; line-height: 1.5;
-  resize: none; max-height: 140px; padding: 3px 4px;
+  resize: none; height: 28px; min-height: 28px; max-height: 140px;
+  padding: 3px 4px; overflow-y: hidden;
 }
 #text::placeholder { color: var(--text-muted); }
 .icon-btn {
@@ -408,11 +409,10 @@ body {
 
   <div id="input-area">
     <div class="input-box">
-      <textarea id="text" rows="1" placeholder="Kuch bhi poochho…"
-        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-      <button class="icon-btn" id="micBtn" onclick="toggleMic()" title="Mic">🎤</button>
-      <button id="talkBtn" onclick="toggleTalk()">🔁 Talk</button>
-      <button id="sendBtn" onclick="send()" title="Send">➤</button>
+      <textarea id="text" placeholder="Kuch bhi poochho…"></textarea>
+      <button class="icon-btn" id="micBtn" title="Mic">🎤</button>
+      <button id="talkBtn">🔁 Talk</button>
+      <button id="sendBtn" title="Send">➤</button>
     </div>
     <div class="input-hint">Enter to send · Shift+Enter for new line · 🎤 for voice</div>
   </div>
@@ -425,7 +425,45 @@ let isTalkMode  = false;
 let recognition = null;
 let currentAudio = null;
 let msgCount = 0;
-let chatHistory = [];
+
+// ── Wire up buttons after DOM ready ──
+document.addEventListener('DOMContentLoaded', function() {
+  const textEl  = document.getElementById('text');
+  const sendBtn = document.getElementById('sendBtn');
+  const micBtn  = document.getElementById('micBtn');
+  const talkBtn = document.getElementById('talkBtn');
+
+  // Auto-resize textarea
+  textEl.addEventListener('input', function() {
+    this.style.height = '28px';
+    const sh = this.scrollHeight;
+    this.style.height = Math.min(sh, 140) + 'px';
+    this.style.overflowY = sh > 140 ? 'auto' : 'hidden';
+  });
+
+  // Enter to send, Shift+Enter for newline
+  textEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  });
+
+  // Send button click
+  sendBtn.addEventListener('click', function() {
+    send();
+  });
+
+  // Mic button
+  micBtn.addEventListener('click', function() {
+    toggleMic();
+  });
+
+  // Talk button
+  talkBtn.addEventListener('click', function() {
+    toggleTalk();
+  });
+});
 
 // ── Unlock autoplay on first click ──
 document.addEventListener('click', () => {
@@ -434,7 +472,7 @@ document.addEventListener('click', () => {
   a.play().catch(() => {});
 }, { once: true });
 
-// ── Safe TTS cancel — MAIN FIX ──
+// ── Safe TTS cancel ──
 function cancelSpeech() {
   try {
     if (window.speechSynthesis) window.speechSynthesis.cancel();
@@ -445,17 +483,10 @@ function setStatus(m) {
   document.getElementById('status-pill').textContent = m;
 }
 
-function autoResize(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
-}
-
-function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-}
-
 function suggest(text) {
-  document.getElementById('text').value = text;
+  const el = document.getElementById('text');
+  el.value = text;
+  el.style.height = '28px';
   send();
 }
 
@@ -587,7 +618,6 @@ function buildWelcomeHTML() {
 }
 
 function clearChat() {
-  chatHistory = [];
   msgCount = 0;
   const chat = document.getElementById('chat');
   chat.innerHTML = '';
@@ -609,7 +639,9 @@ async function send() {
   if (!msg) return;
 
   addUserMsg(msg);
-  input.value = ''; input.style.height = 'auto';
+  input.value = '';
+  input.style.height = '28px';
+  input.style.overflowY = 'hidden';
   addTyping();
   setStatus('⏳ Thinking…');
 
