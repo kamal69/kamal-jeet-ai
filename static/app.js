@@ -294,14 +294,14 @@ function spk(text, onEnd){
     var chunks = [];
     var cur = '';
     for(var w = 0; w < words.length; w++){
-    var candidate = cur ? cur + ' ' + words[w] : words[w];
-    if(candidate.length > 150){
-        if(cur){ chunks.push(cur); }
-        cur = words[w];
-    } else {
-        cur = candidate;
+        var nxt = cur ? cur + ' ' + words[w] : words[w];
+        if(nxt.length > 150){
+            if(cur){ chunks.push(cur); }
+            cur = words[w];
+        } else {
+            cur = nxt;
+        }
     }
-}
     if(cur){ chunks.push(cur); }
     if(!chunks.length){ if(onEnd){ onEnd(); } return; }
 
@@ -343,7 +343,7 @@ function spk(text, onEnd){
         }
         if(v){ u.voice = v; }
         u.lang = isH ? 'hi-IN' : 'en-IN';
-        u.rate = 0.92; u.pitch = 1.0; u.volume = 1.0;
+        u.rate = 0.82; u.pitch = 1.08; u.volume = 1.0;
         u.onend = nxt;
         u.onerror = function(){ clearInterval(ka); setSt('Ready'); if(onEnd){ onEnd(); } };
         window.speechSynthesis.speak(u);
