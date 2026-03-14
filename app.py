@@ -419,6 +419,7 @@ body {
 </div>
 
 <script>
+{% raw %}
 // ── State ──
 let isListening = false;
 let isTalkMode  = false;
@@ -836,8 +837,8 @@ function stopListening() {
   document.getElementById('micBtn').classList.remove('active');
   if (recognition) { try { recognition.stop(); } catch(e) {} recognition = null; }
 }
+{% endraw %}
 </script>
-</body>
 </html>
 """
 
