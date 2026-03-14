@@ -262,7 +262,7 @@ function renderMD(raw){
     var ce=txt.indexOf('```',ci+3);
     if(ce===-1){ out+=inlineRender(txt.slice(ci)); break; }
     var block=txt.slice(ci+3,ce);
-    var nl=block.indexOf('\n');
+    
     var lang='code', code=block;
     if(nl!==-1){
       var fl=block.slice(0,nl).trim();
