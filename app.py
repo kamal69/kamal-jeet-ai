@@ -23,10 +23,10 @@ eleven = ElevenLabs(api_key=ELEVEN_API_KEY)
 history = []
 
 SYSTEM = """
-You are Sarthi AI, a friendly assistant.
-Reply in the same language user uses.
-If user asks for image reply exactly:
-[IMAGE:query]
+You are Sarthi AI, a friendly and intelligent assistant.
+Reply in the same language user uses (Hindi / English / Hinglish).
+Give natural detailed answers.
+If user asks for image reply exactly: [IMAGE:query]
 """
 
 @app.route("/")
@@ -56,31 +56,31 @@ def chat():
 
     messages = [{"role":"system","content":SYSTEM}] + history
 
-    # Tavily Search
+    # Latest Internet Search
     sr = tavily_search(msg)
 
     if sr:
         messages.insert(1,{
             "role":"system",
-            "content":"Latest internet info:\n\n"+sr
+            "content":"Latest internet information:\n\n"+sr
         })
 
     resp = groq.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=messages,
-        max_tokens=600
+        max_tokens=600,
+        temperature=0.85
     )
 
     reply = resp.choices[0].message.content.strip()
 
     history.append({"role":"assistant","content":reply})
 
-    # Image detection
+    # Detect image request
     m = re.match(r'^\[IMAGE:(.*?)\]$', reply, re.IGNORECASE)
 
     if m:
         q = m.group(1)
-
         return jsonify({
             "type":"image",
             "image_url":fetch_image(q),
@@ -124,7 +124,7 @@ def tavily_search(query):
         return None
 
 
-# Image search
+# Image Search
 def fetch_image(query):
 
     try:
@@ -153,7 +153,7 @@ def fetch_image(query):
     return None
 
 
-# ElevenLabs Voice
+# Human-like Voice
 def tts(text):
 
     try:
@@ -176,7 +176,7 @@ def tts(text):
         return base64.b64encode(audio_bytes).decode()
 
     except Exception as e:
-        print("ElevenLabs error:",e)
+        print("Voice error:",e)
         return None
 
 
