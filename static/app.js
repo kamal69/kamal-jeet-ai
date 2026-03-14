@@ -294,14 +294,14 @@ function spk(text, onEnd){
     var chunks = [];
     var cur = '';
     for(var w = 0; w < words.length; w++){
-        var nxt = cur ? cur + ' ' + words[w] : words[w];
-        if(nxt.length > 150){
-            if(cur){ chunks.push(cur); }
-            cur = words[w];
-        } else {
-            cur = nxt;
-        }
+    var candidate = cur ? cur + ' ' + words[w] : words[w];
+    if(candidate.length > 150){
+        if(cur){ chunks.push(cur); }
+        cur = words[w];
+    } else {
+        cur = candidate;
     }
+}
     if(cur){ chunks.push(cur); }
     if(!chunks.length){ if(onEnd){ onEnd(); } return; }
 
