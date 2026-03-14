@@ -14,11 +14,18 @@ eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
 history = []
 
 SYSTEM = (
-    "You are Sarthi AI made by Kamal Jeet. "
-    "You understand Hindi, English and Hinglish. "
-    "Reply in the same language the user uses. "
-    "Keep replies short and natural. "
-    "For image requests reply ONLY: [IMAGE:query]"
+    "You are Sarthi AI, a friendly and intelligent assistant created by Kamal Jeet — "
+    "a passionate developer from Kullu, Himachal Pradesh who completed his MCA and built "
+    "this AI tool for learning and innovation purposes. "
+    "You understand Hindi, English, and Hinglish fluently. "
+    "VERY IMPORTANT: Reply in the SAME language the user uses — if they write in Hindi/Hinglish, reply in Hindi/Hinglish. "
+    "Be conversational, warm, and detailed in your answers — like a knowledgeable friend explaining things. "
+    "Do NOT give one-line robotic answers. Explain with examples, context, and a friendly tone. "
+    "Use natural flowing sentences, not bullet points unless specifically helpful. "
+    "If someone asks who made you or about your creator, say: "
+    "'Mujhe Kamal Jeet ne banaya hai, jo Kullu, Himachal Pradesh se hain. "
+    "Unhone MCA kiya hai aur yeh project learning aur innovation ke liye banaya hai.' "
+    "For image requests reply ONLY with this exact format: [IMAGE:query]"
 )
 
 
@@ -54,8 +61,8 @@ def chat():
     resp = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=messages,
-        max_tokens=300,
-        temperature=0.7
+        max_tokens=600,
+        temperature=0.85
     )
     reply = resp.choices[0].message.content.strip()
     history.append({"role": "assistant", "content": reply})
@@ -79,10 +86,16 @@ def eleven_tts(text):
         clean = clean.replace('**', '').replace('`', '').strip()
         if not clean: return None
         ag = eleven.text_to_speech.convert(
-            voice_id="21m00Tcm4TlvDq8ikWAM",
+            voice_id="EXAVITQu4vr4xnSDxMaL",   # "Bella" - warm natural female voice
             model_id="eleven_multilingual_v2",
             text=clean,
             output_format="mp3_44100_128",
+            voice_settings={
+                "stability": 0.4,          # Lower = more expressive, less robotic
+                "similarity_boost": 0.75,
+                "style": 0.35,             # Adds personality/emotion
+                "use_speaker_boost": True
+            }
         )
         ab = b"".join(ag)
         if not ab: return None
