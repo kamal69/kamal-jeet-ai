@@ -9,7 +9,8 @@ load_dotenv()
 
 app = Flask(__name__)
 
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_CSE_ID  = os.getenv("GOOGLE_CSE_ID")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
 history = []
@@ -57,7 +58,14 @@ def chat():
 
     sr = web_search(msg)
     if sr:
-        messages.insert(1, {"role": "system", "content": "Web info:\n" + sr})
+        messages.insert(1, {
+            "role": "system",
+            "content": (
+                "Yeh Google Search se real-time information mili hai, isse use karo apne jawab mein:\n\n"
+                + sr +
+                "\n\nIn results ke basis pe accurate aur detailed jawab do."
+            )
+        })
 
     resp = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -113,21 +121,41 @@ def eleven_tts(text):
 
 
 def web_search(query):
-    if not TAVILY_API_KEY: return None
+    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
+        return None
     try:
-        payload = json.dumps({
-            "api_key": TAVILY_API_KEY, "query": query, "max_results": 3
-        }).encode()
-        req = urllib.request.Request(
-            "https://api.tavily.com/search", data=payload,
-            headers={"Content-Type": "application/json"}, method="POST"
-        )
+        params = urllib.parse.urlencode({
+            "key": GOOGLE_API_KEY,
+            "cx":  GOOGLE_CSE_ID,
+            "q":   query,
+            "num": 5,
+            "hl":  "hi",          # Hindi results bhi milenge
+            "gl":  "in"           # India-focused results
+        })
+        url = "https://www.googleapis.com/customsearch/v1?" + params
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=8) as r:
             d = json.loads(r.read().decode())
-        if d.get("answer"): return d["answer"]
-        return " ".join([x.get("content", "")[:200] for x in d.get("results", [])])
+
+        items = d.get("items", [])
+        if not items:
+            return None
+
+        # Extract title + snippet from top results
+        parts = []
+        for item in items[:4]:
+            title   = item.get("title", "")
+            snippet = item.get("snippet", "")
+            link    = item.get("link", "")
+            if snippet:
+                parts.append(f"{title}: {snippet} (Source: {link})")
+
+        result = "\n\n".join(parts)
+        print(f"Google Search OK — {len(items)} results for: {query}")
+        return result
+
     except Exception as e:
-        print("Search error: " + str(e))
+        print("Google Search ERROR: " + str(e))
         return None
 
 
