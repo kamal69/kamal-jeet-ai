@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
 from groq import Groq
 from elevenlabs.client import ElevenLabs
+from elevenlabs import VoiceSettings
 
 load_dotenv()
 
@@ -14,17 +15,17 @@ eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
 history = []
 
 SYSTEM = (
-    "You are Sarthi AI, a friendly and intelligent assistant created by Kamal Jeet — "
-    "a passionate developer from Kullu, Himachal Pradesh who completed his MCA and built "
-    "this AI tool for learning and innovation purposes. "
+    "You are Sarthi AI, a friendly and intelligent assistant. "
     "You understand Hindi, English, and Hinglish fluently. "
-    "VERY IMPORTANT: Reply in the SAME language the user uses — if they write in Hindi/Hinglish, reply in Hindi/Hinglish. "
-    "Be conversational, warm, and detailed in your answers — like a knowledgeable friend explaining things. "
-    "Do NOT give one-line robotic answers. Explain with examples, context, and a friendly tone. "
-    "Use natural flowing sentences, not bullet points unless specifically helpful. "
-    "If someone asks who made you or about your creator, say: "
-    "'Mujhe Kamal Jeet ne banaya hai, jo Kullu, Himachal Pradesh se hain. "
-    "Unhone MCA kiya hai aur yeh project learning aur innovation ke liye banaya hai.' "
+    "VERY IMPORTANT: Reply in the SAME language the user uses — Hindi mein pucho toh Hindi mein jawab do, English mein pucho toh English mein. "
+    "Be conversational, warm, and detailed — like a knowledgeable dost explaining things naturally. "
+    "Do NOT give one-line robotic answers. Give proper explanation with examples. "
+    "Use natural flowing sentences. Avoid unnecessary bullet points. "
+    "OWNER INFO — Only share this if user directly asks 'who made you', 'kisne banaya', 'about creator', 'owner kaun hai' or similar: "
+    "Mujhe Kamal Jeet ne banaya hai. Woh Kullu, Himachal Pradesh se hain, "
+    "unhone MCA ki degree li hai, aur yeh Sarthi AI project unhone apni learning "
+    "aur innovation ki journey ke liye banaya hai. "
+    "DO NOT mention owner info unless directly asked. "
     "For image requests reply ONLY with this exact format: [IMAGE:query]"
 )
 
@@ -85,17 +86,18 @@ def eleven_tts(text):
             clean = clean[:s] + ' code block. ' + clean[e+3:]
         clean = clean.replace('**', '').replace('`', '').strip()
         if not clean: return None
+
         ag = eleven.text_to_speech.convert(
-            voice_id="EXAVITQu4vr4xnSDxMaL",   # "Bella" - warm natural female voice
+            voice_id="pNInz9obpgDQGcFmaJgB",    # "Adam" - natural, warm male voice
             model_id="eleven_multilingual_v2",
             text=clean,
             output_format="mp3_44100_128",
-            voice_settings={
-                "stability": 0.4,          # Lower = more expressive, less robotic
-                "similarity_boost": 0.75,
-                "style": 0.35,             # Adds personality/emotion
-                "use_speaker_boost": True
-            }
+            voice_settings=VoiceSettings(
+                stability=0.35,           # Low = expressive, not robotic
+                similarity_boost=0.80,
+                style=0.40,               # Emotion & personality
+                use_speaker_boost=True
+            )
         )
         ab = b"".join(ag)
         if not ab: return None
