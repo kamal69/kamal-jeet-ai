@@ -130,8 +130,10 @@ def web_search(query):
             "cx":  GOOGLE_CSE_ID,
             "q":   query,
             "num": 5,
-            "hl":  "hi",          # Hindi results bhi milenge
-            "gl":  "in"           # India-focused results
+            "hl":  "hi",
+            "gl":  "in",
+            "siteSearch": "www.google.com",
+            "siteSearchFilter": "e"   # 'e' = exclude, so searches everywhere EXCEPT restriction
         })
         url = "https://www.googleapis.com/customsearch/v1?" + params
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
@@ -142,7 +144,6 @@ def web_search(query):
         if not items:
             return None
 
-        # Extract title + snippet from top results
         parts = []
         for item in items[:4]:
             title   = item.get("title", "")
@@ -161,7 +162,6 @@ def web_search(query):
 
 
 def fetch_image(query):
-    # First try Google CSE image search
     if GOOGLE_API_KEY and GOOGLE_CSE_ID:
         try:
             params = urllib.parse.urlencode({
@@ -171,8 +171,9 @@ def fetch_image(query):
                 "searchType": "image",
                 "num":        1,
                 "safe":       "active",
-                "imgSize":    "large",
-                "gl":         "in"
+                "gl":         "in",
+                "siteSearch": "www.google.com",
+                "siteSearchFilter": "e"
             })
             url = "https://www.googleapis.com/customsearch/v1?" + params
             req = urllib.request.Request(url, headers={"Accept": "application/json"})
