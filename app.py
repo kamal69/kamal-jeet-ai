@@ -4,25 +4,25 @@ import urllib.request
 import urllib.parse
 import re
 import json
-
+ 
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 from groq import Groq
 from elevenlabs.client import ElevenLabs
-
+ 
 load_dotenv()
-
+ 
 app = Flask(__name__)
-
+ 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-
+ 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
-
+ 
 history = []
-
+ 
 # ================= SYSTEM PROMPT =================
-
+ 
 SYSTEM = """
 You are Sarthi AI - a friendly, smart AI assistant made by Kamal Jeet.
 You understand Hindi, English and Hinglish fluently.
@@ -30,9 +30,9 @@ Always reply in the same language the user speaks.
 Keep replies short and natural for voice conversation.
 If user asks for an image, reply ONLY with: [IMAGE:search query]
 """
-
+ 
 # ================= HTML =================
-
+ 
 HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -64,7 +64,7 @@ body {
   display: flex;
   height: 100vh;
 }
-
+ 
 /* ── Sidebar ── */
 #sidebar {
   width: 240px;
@@ -130,10 +130,10 @@ body {
   font-size: 12px; font-weight: 600; flex-shrink: 0;
 }
 .user-name { font-size: 12.5px; font-weight: 500; }
-
+ 
 /* ── Main ── */
 #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-
+ 
 /* ── Topbar ── */
 #topbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -154,7 +154,7 @@ body {
   background: var(--surface); border: 1px solid var(--border);
   transition: all 0.2s;
 }
-
+ 
 /* ── Chat ── */
 #chat {
   flex: 1; overflow-y: auto;
@@ -164,7 +164,7 @@ body {
 }
 #chat::-webkit-scrollbar { width: 4px; }
 #chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
+ 
 /* ── Welcome ── */
 #welcome {
   flex: 1; display: flex; flex-direction: column;
@@ -194,7 +194,7 @@ body {
 }
 .suggestion-card:hover { border-color: var(--accent); color: var(--text); background: var(--surface2); }
 .suggestion-card strong { display: block; color: var(--text); font-size: 12px; margin-bottom: 3px; }
-
+ 
 /* ── Message rows ── */
 .msg-row {
   padding: 16px 24px; display: flex; gap: 14px;
@@ -266,7 +266,7 @@ body {
 .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
 .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
-
+ 
 /* ── Input ── */
 #input-area {
   padding: 16px 24px 20px;
@@ -319,7 +319,7 @@ body {
   margin-top: 8px; max-width: 820px; margin-left: auto; margin-right: auto;
 }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
-
+ 
 @media(max-width: 640px){
   #sidebar { display: none; }
   .msg-row { padding: 12px 14px; }
@@ -329,7 +329,7 @@ body {
 </style>
 </head>
 <body>
-
+ 
 <!-- Sidebar -->
 <div id="sidebar">
   <div class="logo">
@@ -350,12 +350,12 @@ body {
       <div class="logo-sub">Powered by Kamal Jeet</div>
     </div>
   </div>
-
+ 
   <button class="new-chat-btn" onclick="newChat()">✏️ &nbsp; New Chat</button>
-
+ 
   <div class="sidebar-label">Recent</div>
   <div class="chat-item active" id="currentChatLabel">New conversation</div>
-
+ 
   <div class="sidebar-bottom">
     <div class="user-pill">
       <div class="user-avatar">KJ</div>
@@ -366,7 +366,7 @@ body {
     </div>
   </div>
 </div>
-
+ 
 <!-- Main -->
 <div id="main">
   <div id="topbar">
@@ -384,7 +384,7 @@ body {
       <div id="status-pill">Ready</div>
     </div>
   </div>
-
+ 
   <div id="chat">
     <div id="welcome">
       <div class="welcome-icon">🤖</div>
@@ -406,7 +406,7 @@ body {
       </div>
     </div>
   </div>
-
+ 
   <div id="input-area">
     <div class="input-box">
       <textarea id="text" placeholder="Kuch bhi poochho…"></textarea>
@@ -417,7 +417,7 @@ body {
     <div class="input-hint">Enter to send · Shift+Enter for new line · 🎤 for voice</div>
   </div>
 </div>
-
+ 
 <script>
 {% raw %}
 // ── State ──
@@ -426,14 +426,14 @@ let isTalkMode  = false;
 let recognition = null;
 let currentAudio = null;
 let msgCount = 0;
-
+ 
 // ── Wire up buttons after DOM ready ──
 document.addEventListener('DOMContentLoaded', function() {
   const textEl  = document.getElementById('text');
   const sendBtn = document.getElementById('sendBtn');
   const micBtn  = document.getElementById('micBtn');
   const talkBtn = document.getElementById('talkBtn');
-
+ 
   // Auto-resize textarea
   textEl.addEventListener('input', function() {
     this.style.height = '28px';
@@ -441,7 +441,7 @@ document.addEventListener('DOMContentLoaded', function() {
     this.style.height = Math.min(sh, 140) + 'px';
     this.style.overflowY = sh > 140 ? 'auto' : 'hidden';
   });
-
+ 
   // Enter to send, Shift+Enter for newline
   textEl.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -449,53 +449,53 @@ document.addEventListener('DOMContentLoaded', function() {
       send();
     }
   });
-
+ 
   // Send button click
   sendBtn.addEventListener('click', function() {
     send();
   });
-
+ 
   // Mic button
   micBtn.addEventListener('click', function() {
     toggleMic();
   });
-
+ 
   // Talk button
   talkBtn.addEventListener('click', function() {
     toggleTalk();
   });
 });
-
+ 
 // ── Unlock autoplay on first click ──
 document.addEventListener('click', () => {
   const a = new Audio();
   a.src = "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA";
   a.play().catch(() => {});
 }, { once: true });
-
+ 
 // ── Safe TTS cancel ──
 function cancelSpeech() {
   try {
     if (window.speechSynthesis) window.speechSynthesis.cancel();
   } catch(e) { console.warn('TTS cancel error:', e); }
 }
-
+ 
 function setStatus(m) {
   document.getElementById('status-pill').textContent = m;
 }
-
+ 
 function suggest(text) {
   const el = document.getElementById('text');
   el.value = text;
   el.style.height = '28px';
   send();
 }
-
+ 
 // ── Escape HTML ──
 function esc(t) {
   return (t || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-
+ 
 // ── Render markdown ──
 function renderText(raw) {
   if (!raw) return '';
@@ -528,7 +528,7 @@ function renderText(raw) {
   });
   return html;
 }
-
+ 
 function copyCode(id) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -537,18 +537,18 @@ function copyCode(id) {
     if (btn) { btn.textContent = '✅ Copied'; setTimeout(() => btn.textContent = 'Copy', 2000); }
   });
 }
-
+ 
 // ── DOM helpers ──
 function removeWelcome() {
   const w = document.getElementById('welcome');
   if (w) w.remove();
 }
-
+ 
 function scrollBottom() {
   const c = document.getElementById('chat');
   c.scrollTop = c.scrollHeight;
 }
-
+ 
 function addUserMsg(text) {
   removeWelcome();
   msgCount++;
@@ -563,7 +563,7 @@ function addUserMsg(text) {
   document.getElementById('chat').appendChild(row);
   scrollBottom();
 }
-
+ 
 function addAiMsg(text) {
   const t = document.getElementById('typing');
   if (t) t.remove();
@@ -575,7 +575,7 @@ function addAiMsg(text) {
   document.getElementById('chat').appendChild(row);
   scrollBottom();
 }
-
+ 
 function addTyping() {
   removeWelcome();
   const row = document.createElement('div');
@@ -586,7 +586,7 @@ function addTyping() {
   document.getElementById('chat').appendChild(row);
   scrollBottom();
 }
-
+ 
 function addImageMsg(src, label) {
   const t = document.getElementById('typing'); if (t) t.remove();
   const row = document.createElement('div');
@@ -603,7 +603,7 @@ function addImageMsg(src, label) {
   document.getElementById('chat').appendChild(row);
   scrollBottom();
 }
-
+ 
 // ── Clear / New Chat ──
 function buildWelcomeHTML() {
   return `
@@ -617,7 +617,7 @@ function buildWelcomeHTML() {
       <div class="suggestion-card" onclick="suggest('Mujhe motivate karo')"><strong>✨ Motivation</strong>Motivational quote do</div>
     </div>`;
 }
-
+ 
 function clearChat() {
   msgCount = 0;
   const chat = document.getElementById('chat');
@@ -630,22 +630,22 @@ function clearChat() {
   setStatus('Ready');
   fetch('/clear', { method: 'POST' }).catch(() => {});
 }
-
+ 
 function newChat() { clearChat(); }
-
+ 
 // ── Send ──
 async function send() {
   const input = document.getElementById('text');
   const msg = input.value.trim();
   if (!msg) return;
-
+ 
   addUserMsg(msg);
   input.value = '';
   input.style.height = '28px';
   input.style.overflowY = 'hidden';
   addTyping();
   setStatus('⏳ Thinking…');
-
+ 
   try {
     const res = await fetch('/chat', {
       method: 'POST',
@@ -653,7 +653,7 @@ async function send() {
       body: JSON.stringify({ message: msg })
     });
     const data = await res.json();
-
+ 
     // Image response
     if (data.type === 'image') {
       if (data.image_url) addImageMsg(data.image_url, data.query);
@@ -662,20 +662,20 @@ async function send() {
       if (isTalkMode) startListening();
       return;
     }
-
+ 
     const reply = data.reply || '';
     addAiMsg(reply);
-
+ 
     // ── Audio playback ──
     if (data.audio) {
       // ElevenLabs audio available
       if (currentAudio) { currentAudio.pause(); currentAudio = null; }
       cancelSpeech();
-
+ 
       const audio = new Audio('data:audio/mp3;base64,' + data.audio);
       currentAudio = audio;
       setStatus('🔊 Speaking…');
-
+ 
       audio.onended = () => {
         currentAudio = null;
         setStatus('Ready');
@@ -689,12 +689,12 @@ async function send() {
       audio.play().catch(() => {
         speakText(reply, () => { if (isTalkMode) startListening(); });
       });
-
+ 
     } else {
       // Fallback: Browser TTS
       speakText(reply, () => { if (isTalkMode) startListening(); });
     }
-
+ 
   } catch(e) {
     const t = document.getElementById('typing'); if (t) t.remove();
     addAiMsg('❌ Error: ' + e.message);
@@ -702,15 +702,15 @@ async function send() {
     if (isTalkMode) startListening();
   }
 }
-
+ 
 // ── Browser TTS (fallback) ──
 function speakText(text, onEnd) {
   // FIXED: Safe guards for undefined/null
   if (!text) { if (onEnd) onEnd(); return; }
   if (!window.speechSynthesis) { if (onEnd) onEnd(); return; }
-
+ 
   cancelSpeech();
-
+ 
   // Clean markdown for speech
   const clean = text
     .replace(/```[\s\S]*?```/g, 'code block.')
@@ -718,9 +718,9 @@ function speakText(text, onEnd) {
     .replace(/`([^`]+)`/g, '$1')
     .replace(/[#*_~]/g, '')
     .trim();
-
+ 
   if (!clean) { if (onEnd) onEnd(); return; }
-
+ 
   // Split into short chunks (Android Chrome bug fix)
   const sentences = clean.match(/[^।!?.]+[।!?.]?/g) || [clean];
   const chunks = [];
@@ -730,10 +730,10 @@ function speakText(text, onEnd) {
     else cur += s;
   });
   if (cur.trim()) chunks.push(cur.trim());
-
+ 
   const voices = window.speechSynthesis.getVoices();
   let idx = 0;
-
+ 
   // Android Chrome keepAlive fix
   const keepAlive = setInterval(() => {
     if (!window.speechSynthesis || !window.speechSynthesis.speaking) {
@@ -742,7 +742,7 @@ function speakText(text, onEnd) {
     window.speechSynthesis.pause();
     window.speechSynthesis.resume();
   }, 10000);
-
+ 
   function speakNext() {
     if (idx >= chunks.length) {
       clearInterval(keepAlive);
@@ -769,21 +769,21 @@ function speakText(text, onEnd) {
     utter.onerror = () => { clearInterval(keepAlive); setStatus('Ready'); if (onEnd) onEnd(); };
     window.speechSynthesis.speak(utter);
   }
-
+ 
   setStatus('🔊 Speaking…');
   speakNext();
 }
-
+ 
 // Preload voices
 if (window.speechSynthesis && window.speechSynthesis.onvoiceschanged !== undefined) {
   window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 }
-
+ 
 // ── Mic / Talk Mode ──
 function toggleMic() {
   if (isListening) stopListening(); else startListening();
 }
-
+ 
 function toggleTalk() {
   isTalkMode = !isTalkMode;
   const btn = document.getElementById('talkBtn');
@@ -801,7 +801,7 @@ function toggleTalk() {
     setStatus('Ready');
   }
 }
-
+ 
 function buildRecognition() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { alert('Chrome use karein mic ke liye!'); return null; }
@@ -822,7 +822,7 @@ function buildRecognition() {
   r.onend    = ()  => { stopListening(); };
   return r;
 }
-
+ 
 function startListening() {
   if (isListening) return;
   cancelSpeech(); // FIXED: safe cancel
@@ -831,7 +831,7 @@ function startListening() {
   if (!recognition) return;
   try { recognition.start(); } catch(e) { console.warn(e); }
 }
-
+ 
 function stopListening() {
   isListening = false;
   document.getElementById('micBtn').classList.remove('active');
@@ -841,15 +841,15 @@ function stopListening() {
 </script>
 </html>
 """
-
-
+ 
+ 
 # ================= HELPERS =================
-
+ 
 def detect_lang(text):
     hindi = "अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह"
     return "hi" if sum(1 for c in text if c in hindi) > 2 else "en"
-
-
+ 
+ 
 def eleven_tts(text):
     """ElevenLabs TTS — returns base64 mp3 or None on failure."""
     try:
@@ -858,31 +858,31 @@ def eleven_tts(text):
         clean = re.sub(r'\*\*(.*?)\*\*', r'\1', clean)
         clean = re.sub(r'`([^`]+)`', r'\1', clean)
         clean = re.sub(r'[#*_~]', '', clean).strip()
-
+ 
         if not clean:
             return None
-
+ 
         audio_generator = eleven.text_to_speech.convert(
             voice_id="21m00Tcm4TlvDq8ikWAM",       # Rachel — multilingual
             model_id="eleven_multilingual_v2",
             text=clean,
             output_format="mp3_44100_128",
         )
-
+ 
         audio_bytes = b"".join(audio_generator)
-
+ 
         if not audio_bytes:
             print("ElevenLabs: Empty audio received")
             return None
-
+ 
         print(f"ElevenLabs OK — {len(audio_bytes)} bytes")
         return base64.b64encode(audio_bytes).decode()
-
+ 
     except Exception as e:
         print(f"ElevenLabs ERROR: {type(e).__name__}: {e}")
         return None
-
-
+ 
+ 
 def web_search(query):
     """Tavily web search — returns answer string or None."""
     if not TAVILY_API_KEY:
@@ -909,8 +909,8 @@ def web_search(query):
     except Exception as e:
         print("Search error:", e)
         return None
-
-
+ 
+ 
 def fetch_image(query):
     """Wikipedia image fetch."""
     try:
@@ -926,32 +926,32 @@ def fetch_image(query):
     except:
         pass
     return None
-
-
+ 
+ 
 # ================= ROUTES =================
-
+ 
 @app.route("/")
 def home():
     return render_template_string(HTML)
-
-
+ 
+ 
 @app.route("/clear", methods=["POST"])
 def clear():
     global history
     history = []
     return jsonify({"status": "cleared"})
-
-
+ 
+ 
 @app.route("/chat", methods=["POST"])
 def chat():
     global history
     data = request.json
     msg = data.get("message", "")
-
+ 
     history.append({"role": "user", "content": msg})
-
+ 
     messages = [{"role": "system", "content": SYSTEM}] + history
-
+ 
     # Web search inject
     search = web_search(msg)
     if search:
@@ -959,32 +959,32 @@ def chat():
             "role": "system",
             "content": "Latest web info:\n" + search
         })
-
+ 
     resp = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=messages,
         max_tokens=300,
         temperature=0.7
     )
-
+ 
     reply = resp.choices[0].message.content.strip()
     history.append({"role": "assistant", "content": reply})
-
+ 
     # Image request check
     img_match = re.match(r'^\[IMAGE:(.*?)\]$', reply, re.IGNORECASE)
     if img_match:
         q = img_match.group(1)
         img = fetch_image(q)
         return jsonify({"type": "image", "image_url": img, "query": q})
-
+ 
     # TTS
     audio = eleven_tts(reply)
-
+ 
     return jsonify({"reply": reply, "audio": audio})
-
-
+ 
+ 
 # ================= START =================
-
+ 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
