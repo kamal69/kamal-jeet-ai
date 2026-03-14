@@ -87,15 +87,19 @@ def eleven_tts(text):
         clean = clean.replace('**', '').replace('`', '').strip()
         if not clean: return None
 
+        # Detect if text has Hindi characters
+        has_hindi = any('\u0900' <= ch <= '\u097F' for ch in clean)
+
         ag = eleven.text_to_speech.convert(
-            voice_id="pNInz9obpgDQGcFmaJgB",    # "Adam" - natural, warm male voice
-            model_id="eleven_multilingual_v2",
+            voice_id="TX3LPaxmHKxFdv7VOQHJ",    # "Liam" - most natural for multilingual
+            model_id="eleven_turbo_v2_5",         # Best model for Hindi/Hinglish naturalness
             text=clean,
             output_format="mp3_44100_128",
+            language_code="hi" if has_hindi else "en",
             voice_settings=VoiceSettings(
-                stability=0.35,           # Low = expressive, not robotic
-                similarity_boost=0.80,
-                style=0.40,               # Emotion & personality
+                stability=0.30,           # Low = very expressive, human-like
+                similarity_boost=0.75,
+                style=0.45,
                 use_speaker_boost=True
             )
         )
