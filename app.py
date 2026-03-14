@@ -9,7 +9,8 @@ load_dotenv()
 
 app = Flask(__name__)
 
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_CSE_ID  = os.getenv("GOOGLE_CSE_ID")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
 history = []
@@ -17,16 +18,17 @@ history = []
 SYSTEM = (
     "You are Sarthi AI, a friendly and intelligent assistant. "
     "You understand Hindi, English, and Hinglish fluently. "
-    "VERY IMPORTANT: Reply in the SAME language the user uses — Hindi mein pucho toh Hindi mein jawab do, English mein pucho toh English mein. "
-    "Be conversational, warm, and detailed — like a knowledgeable dost explaining things naturally. "
-    "Do NOT give one-line robotic answers. Give proper explanation with examples. "
-    "Use natural flowing sentences. Avoid unnecessary bullet points. "
-    "OWNER INFO — Only share this if user directly asks 'who made you', 'kisne banaya', 'about creator', 'owner kaun hai' or similar: "
-    "Mujhe Kamal Jeet ne banaya hai. Woh Kullu, Himachal Pradesh se hain, "
-    "unhone MCA ki degree li hai, aur yeh Sarthi AI project unhone apni learning "
-    "aur innovation ki journey ke liye banaya hai. "
+    "VERY IMPORTANT: Reply in the SAME language the user uses. "
+    "If user writes Hinglish (mix of Hindi+English), reply in natural casual Hinglish. "
+    "If user writes pure Hindi, reply in simple everyday Hindi — avoid heavy Sanskrit words like 'sthit', 'smaarak', 'nirman'. "
+    "Use simple words: 'hai' not 'hain', 'banaya' not 'nirmit kiya', 'mein' not 'mein sthit'. "
+    "Be like a knowledgeable dost — warm, natural, detailed with examples. "
+    "Do NOT give one-line answers. Give good explanation naturally. "
+    "OWNER INFO — Only share if directly asked 'who made you', 'kisne banaya', 'owner kaun hai': "
+    "Mujhe Kamal Jeet ne banaya hai jo Kullu, Himachal Pradesh se hain, "
+    "unhone MCA ki hai aur yeh project learning aur innovation ke liye banaya hai. "
     "DO NOT mention owner info unless directly asked. "
-    "For image requests reply ONLY with this exact format: [IMAGE:query]"
+    "For image requests reply ONLY: [IMAGE:query]"
 )
 
 
@@ -57,7 +59,14 @@ def chat():
 
     sr = web_search(msg)
     if sr:
-        messages.insert(1, {"role": "system", "content": "Web info:\n" + sr})
+        messages.insert(1, {
+            "role": "system",
+            "content": (
+                "Yeh Google Search se real-time information mili hai, isse use karo apne jawab mein:\n\n"
+                + sr +
+                "\n\nIn results ke basis pe accurate aur detailed jawab do."
+            )
+        })
 
     resp = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -87,15 +96,18 @@ def eleven_tts(text):
         clean = clean.replace('**', '').replace('`', '').strip()
         if not clean: return None
 
+        # Detect if text has Hindi characters
+        has_hindi = any('\u0900' <= ch <= '\u097F' for ch in clean)
+
         ag = eleven.text_to_speech.convert(
-            voice_id="pNInz9obpgDQGcFmaJgB",    # "Adam" - natural, warm male voice
-            model_id="eleven_multilingual_v2",
+            voice_id="TX3LPaxmHKxFdv7VOQHJ",
+            model_id="eleven_turbo_v2_5",
             text=clean,
             output_format="mp3_44100_128",
             voice_settings=VoiceSettings(
-                stability=0.35,           # Low = expressive, not robotic
-                similarity_boost=0.80,
-                style=0.40,               # Emotion & personality
+                stability=0.30,
+                similarity_boost=0.75,
+                style=0.45,
                 use_speaker_boost=True
             )
         )
@@ -109,35 +121,86 @@ def eleven_tts(text):
 
 
 def web_search(query):
-    if not TAVILY_API_KEY: return None
+    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
+        return None
     try:
-        payload = json.dumps({
-            "api_key": TAVILY_API_KEY, "query": query, "max_results": 3
-        }).encode()
-        req = urllib.request.Request(
-            "https://api.tavily.com/search", data=payload,
-            headers={"Content-Type": "application/json"}, method="POST"
-        )
+        params = urllib.parse.urlencode({
+            "key": GOOGLE_API_KEY,
+            "cx":  GOOGLE_CSE_ID,
+            "q":   query,
+            "num": 5,
+            "hl":  "hi",
+            "gl":  "in",
+            "siteSearch": "www.google.com",
+            "siteSearchFilter": "e"   # 'e' = exclude, so searches everywhere EXCEPT restriction
+        })
+        url = "https://www.googleapis.com/customsearch/v1?" + params
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=8) as r:
             d = json.loads(r.read().decode())
-        if d.get("answer"): return d["answer"]
-        return " ".join([x.get("content", "")[:200] for x in d.get("results", [])])
+
+        items = d.get("items", [])
+        if not items:
+            return None
+
+        parts = []
+        for item in items[:4]:
+            title   = item.get("title", "")
+            snippet = item.get("snippet", "")
+            link    = item.get("link", "")
+            if snippet:
+                parts.append(f"{title}: {snippet} (Source: {link})")
+
+        result = "\n\n".join(parts)
+        print(f"Google Search OK — {len(items)} results for: {query}")
+        return result
+
     except Exception as e:
-        print("Search error: " + str(e))
+        print("Google Search ERROR: " + str(e))
         return None
 
 
 def fetch_image(query):
+    if GOOGLE_API_KEY and GOOGLE_CSE_ID:
+        try:
+            params = urllib.parse.urlencode({
+                "key":        GOOGLE_API_KEY,
+                "cx":         GOOGLE_CSE_ID,
+                "q":          query,
+                "searchType": "image",
+                "num":        1,
+                "safe":       "active",
+                "gl":         "in",
+                "siteSearch": "www.google.com",
+                "siteSearchFilter": "e"
+            })
+            url = "https://www.googleapis.com/customsearch/v1?" + params
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                d = json.loads(r.read().decode())
+            items = d.get("items", [])
+            if items:
+                img_url = items[0].get("link", "")
+                if img_url:
+                    print(f"Google Image OK: {img_url}")
+                    return img_url
+        except Exception as e:
+            print("Google Image ERROR: " + str(e))
+
+    # Fallback: Wikipedia
     try:
         url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
             "action": "query", "titles": query,
             "prop": "pageimages", "pithumbsize": 600, "format": "json"
         })
-        with urllib.request.urlopen(url) as r:
+        with urllib.request.urlopen(url, timeout=6) as r:
             d = json.loads(r.read().decode())
         for page in d["query"]["pages"].values():
-            if "thumbnail" in page: return page["thumbnail"]["source"]
-    except: pass
+            if "thumbnail" in page:
+                return page["thumbnail"]["source"]
+    except Exception as e:
+        print("Wikipedia Image ERROR: " + str(e))
+
     return None
 
 
