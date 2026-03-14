@@ -9,8 +9,6 @@ load_dotenv()
 
 app = Flask(__name__)
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GOOGLE_CSE_ID  = os.getenv("GOOGLE_CSE_ID")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
 history = []
@@ -121,82 +119,104 @@ def eleven_tts(text):
 
 
 def web_search(query):
-    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
-        return None
     try:
+        # DuckDuckGo Instant Answer API - completely free, no key needed
         params = urllib.parse.urlencode({
-            "key": GOOGLE_API_KEY,
-            "cx":  GOOGLE_CSE_ID,
-            "q":   query,
-            "num": 5,
-            "hl":  "hi",
-            "gl":  "in",
-            "siteSearch": "www.google.com",
-            "siteSearchFilter": "e"   # 'e' = exclude, so searches everywhere EXCEPT restriction
+            "q":              query,
+            "format":         "json",
+            "no_html":        "1",
+            "skip_disambig":  "1"
         })
-        url = "https://www.googleapis.com/customsearch/v1?" + params
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        url = "https://api.duckduckgo.com/?" + params
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 SarthiAI/1.0"}
+        )
         with urllib.request.urlopen(req, timeout=8) as r:
             d = json.loads(r.read().decode())
 
-        items = d.get("items", [])
-        if not items:
-            return None
-
         parts = []
-        for item in items[:4]:
-            title   = item.get("title", "")
-            snippet = item.get("snippet", "")
-            link    = item.get("link", "")
-            if snippet:
-                parts.append(f"{title}: {snippet} (Source: {link})")
 
-        result = "\n\n".join(parts)
-        print(f"Google Search OK — {len(items)} results for: {query}")
-        return result
+        # Abstract (Wikipedia-style summary)
+        if d.get("AbstractText"):
+            parts.append(d["AbstractText"])
+
+        # Related topics
+        for topic in d.get("RelatedTopics", [])[:4]:
+            text = topic.get("Text", "")
+            if text:
+                parts.append(text)
+
+        # Answer (for simple queries like math, dates)
+        if d.get("Answer"):
+            parts.insert(0, d["Answer"])
+
+        if parts:
+            result = "\n\n".join(parts[:5])
+            print(f"DuckDuckGo Search OK for: {query}")
+            return result
+
+        print(f"DuckDuckGo: no results for: {query}")
+        return None
 
     except Exception as e:
-        print("Google Search ERROR: " + str(e))
+        print("DuckDuckGo Search ERROR: " + str(e))
         return None
 
 
 def fetch_image(query):
-    if GOOGLE_API_KEY and GOOGLE_CSE_ID:
-        try:
-            params = urllib.parse.urlencode({
-                "key":        GOOGLE_API_KEY,
-                "cx":         GOOGLE_CSE_ID,
-                "q":          query,
-                "searchType": "image",
-                "num":        1,
-                "safe":       "active",
-                "gl":         "in",
-                "siteSearch": "www.google.com",
-                "siteSearchFilter": "e"
-            })
-            url = "https://www.googleapis.com/customsearch/v1?" + params
-            req = urllib.request.Request(url, headers={"Accept": "application/json"})
-            with urllib.request.urlopen(req, timeout=8) as r:
-                d = json.loads(r.read().decode())
-            items = d.get("items", [])
-            if items:
-                img_url = items[0].get("link", "")
-                if img_url:
-                    print(f"Google Image OK: {img_url}")
-                    return img_url
-        except Exception as e:
-            print("Google Image ERROR: " + str(e))
+    # DuckDuckGo image search
+    try:
+        params = urllib.parse.urlencode({
+            "q":      query,
+            "format": "json",
+            "iax":    "images",
+            "ia":     "images"
+        })
+        url = "https://api.duckduckgo.com/?" + params
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 SarthiAI/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=8) as r:
+            d = json.loads(r.read().decode())
+
+        # Try thumbnail from main result
+        if d.get("Image"):
+            img = d["Image"]
+            if img.startswith("http"):
+                print(f"DuckDuckGo Image OK: {img}")
+                return img
+
+        # Try from related topics
+        for topic in d.get("RelatedTopics", []):
+            icon = topic.get("Icon", {})
+            url_img = icon.get("URL", "")
+            if url_img and url_img.startswith("http"):
+                print(f"DDG Topic Image OK: {url_img}")
+                return url_img
+
+    except Exception as e:
+        print("DuckDuckGo Image ERROR: " + str(e))
 
     # Fallback: Wikipedia
     try:
-        url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
-            "action": "query", "titles": query,
-            "prop": "pageimages", "pithumbsize": 600, "format": "json"
+        wiki_url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
+            "action":      "query",
+            "titles":      query,
+            "prop":        "pageimages",
+            "pithumbsize": 600,
+            "format":      "json"
         })
-        with urllib.request.urlopen(url, timeout=6) as r:
+        req = urllib.request.Request(
+            wiki_url,
+            headers={"User-Agent": "Mozilla/5.0 SarthiAI/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=6) as r:
             d = json.loads(r.read().decode())
         for page in d["query"]["pages"].values():
             if "thumbnail" in page:
+                print(f"Wikipedia Image OK: {page['thumbnail']['source']}")
                 return page["thumbnail"]["source"]
     except Exception as e:
         print("Wikipedia Image ERROR: " + str(e))
