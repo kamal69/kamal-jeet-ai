@@ -2,15 +2,12 @@ import os, base64, urllib.request, urllib.parse, re, json
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
 from groq import Groq
-from elevenlabs.client import ElevenLabs
-from elevenlabs import VoiceSettings
 
 load_dotenv()
 
 app = Flask(__name__)
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
 history = []
 
 SYSTEM = (
@@ -80,42 +77,7 @@ def chat():
         q = m.group(1)
         return jsonify({"type": "image", "image_url": fetch_image(q), "query": q})
 
-    return jsonify({"reply": reply, "audio": eleven_tts(reply)})
-
-
-def eleven_tts(text):
-    try:
-        clean = text
-        while '```' in clean:
-            s = clean.find('```')
-            e = clean.find('```', s + 3)
-            if e == -1: break
-            clean = clean[:s] + ' code block. ' + clean[e+3:]
-        clean = clean.replace('**', '').replace('`', '').strip()
-        if not clean: return None
-
-        # Detect if text has Hindi characters
-        has_hindi = any('\u0900' <= ch <= '\u097F' for ch in clean)
-
-        ag = eleven.text_to_speech.convert(
-            voice_id="TX3LPaxmHKxFdv7VOQHJ",
-            model_id="eleven_turbo_v2_5",
-            text=clean,
-            output_format="mp3_44100_128",
-            voice_settings=VoiceSettings(
-                stability=0.30,
-                similarity_boost=0.75,
-                style=0.45,
-                use_speaker_boost=True
-            )
-        )
-        ab = b"".join(ag)
-        if not ab: return None
-        print("ElevenLabs OK -- " + str(len(ab)) + " bytes")
-        return base64.b64encode(ab).decode()
-    except Exception as e:
-        print("ElevenLabs ERROR: " + str(e))
-        return None
+    return jsonify({"reply": reply})
 
 
 def web_search(query):
