@@ -1,341 +1,139 @@
-import os
-import base64
-import urllib.request
-import urllib.parse
-import re
-import json
-
-from flask import Flask, request, jsonify, render_template_string
+import os, base64, urllib.request, urllib.parse, re, json
+from flask import Flask, request, jsonify, send_from_directory, Response
 from dotenv import load_dotenv
 from groq import Groq
 from elevenlabs.client import ElevenLabs
 
 load_dotenv()
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(
+    __name__,
+    static_folder=os.path.join(BASE_DIR, "static"),
+    template_folder=os.path.join(BASE_DIR, "templates")
+)
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
-
 history = []
 
-# ================= SYSTEM PROMPT =================
+SYSTEM = (
+    "You are Sarthi AI made by Kamal Jeet. "
+    "You understand Hindi, English and Hinglish. "
+    "Reply in the same language the user uses. "
+    "Keep replies short and natural. "
+    "For image requests reply ONLY: [IMAGE:query]"
+)
 
-SYSTEM = """
-You are KJ Master AI - a friendly, smart AI assistant.
-You understand Hindi, English and Hinglish fluently.
-Always reply in the same language the user speaks.
-Keep replies short and natural for voice conversation.
-"""
-
-# ================= HTML =================
-
-HTML = r"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Sarthi AI</title>
-<style>
-
-body{
-background:#0d0d0d;
-color:white;
-font-family:Arial;
-margin:0;
-display:flex;
-flex-direction:column;
-height:100vh;
-}
-
-#chat{
-flex:1;
-overflow:auto;
-padding:20px;
-}
-
-.msg{
-margin:10px 0;
-}
-
-.user{
-color:#7dd3fc;
-}
-
-.ai{
-color:#fbbf24;
-}
-
-#box{
-display:flex;
-padding:10px;
-background:#111;
-}
-
-input{
-flex:1;
-padding:10px;
-border:none;
-outline:none;
-}
-
-button{
-padding:10px;
-background:#c96442;
-border:none;
-color:white;
-cursor:pointer;
-}
-
-</style>
-</head>
-
-<body>
-
-<div id="chat"></div>
-
-<div id="box">
-<input id="text" placeholder="Ask anything...">
-<button onclick="send()">Send</button>
-</div>
-
-<script>
-
-async function send(){
-
-const input=document.getElementById("text")
-
-const msg=input.value
-
-if(!msg)return
-
-add("user",msg)
-
-input.value=""
-
-const res=await fetch("/chat",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({message:msg})
-})
-
-const text=await res.text()
-
-let data
-
-try{
-data=JSON.parse(text)
-}catch{
-console.log(text)
-add("ai","Server returned HTML error")
-return
-}
-
-add("ai",data.reply)
-
-}
-
-function add(type,text){
-
-const div=document.createElement("div")
-
-div.className="msg "+type
-
-div.innerText=text
-
-document.getElementById("chat").appendChild(div)
-
-}
-
-</script>
-
-</body>
-</html>
-"""
-
-# ================= ELEVENLABS VOICE =================
-
-def eleven_tts(text):
-
-    try:
-
-        audio = eleven.text_to_speech.convert(
-            voice_id="21m00Tcm4TlvDq8ikWAM",
-            model_id="eleven_multilingual_v2",
-            text=text
-        )
-
-        audio_bytes = b"".join(audio)
-
-        return base64.b64encode(audio_bytes).decode()
-
-    except Exception as e:
-
-        print("ElevenLabs ERROR:", e)
-
-        return None
-
-
-# ================= WEB SEARCH =================
-
-def web_search(query):
-
-    if not TAVILY_API_KEY:
-        return None
-
-    try:
-
-        payload = json.dumps({
-            "api_key": TAVILY_API_KEY,
-            "query": query,
-            "max_results": 3
-        }).encode()
-
-        req = urllib.request.Request(
-            "https://api.tavily.com/search",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-
-        with urllib.request.urlopen(req, timeout=8) as r:
-
-            data = json.loads(r.read().decode())
-
-        if data.get("answer"):
-            return data["answer"]
-
-    except Exception as e:
-
-        print("Search error:", e)
-
-    return None
-
-
-# ================= IMAGE FETCH =================
-
-def fetch_image(query):
-
-    try:
-
-        url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
-
-            "action":"query",
-            "titles":query,
-            "prop":"pageimages",
-            "pithumbsize":600,
-            "format":"json"
-        })
-
-        with urllib.request.urlopen(url) as r:
-
-            data = json.loads(r.read().decode())
-
-        for page in data["query"]["pages"].values():
-
-            if "thumbnail" in page:
-
-                return page["thumbnail"]["source"]
-
-    except:
-        pass
-
-    return None
-
-
-# ================= ROUTES =================
 
 @app.route("/")
 def home():
+    return send_from_directory(
+        os.path.join(BASE_DIR, "templates"), "index.html"
+    )
 
-    return render_template_string(HTML)
+@app.route("/static/<path:filename>")
+def static_files(filename):
+    return send_from_directory(
+        os.path.join(BASE_DIR, "static"), filename
+    )
 
 
 @app.route("/clear", methods=["POST"])
 def clear():
-
     global history
     history = []
-
-    return jsonify({"status":"cleared"})
+    return jsonify({"status": "cleared"})
 
 
 @app.route("/chat", methods=["POST"])
 def chat():
+    global history
+    data = request.json
+    msg = data.get("message", "")
+    history.append({"role": "user", "content": msg})
+    messages = [{"role": "system", "content": SYSTEM}] + history
 
+    sr = web_search(msg)
+    if sr:
+        messages.insert(1, {"role": "system", "content": "Web info:\n" + sr})
+
+    resp = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=messages,
+        max_tokens=300,
+        temperature=0.7
+    )
+    reply = resp.choices[0].message.content.strip()
+    history.append({"role": "assistant", "content": reply})
+
+    m = re.match(r'^\[IMAGE:(.*?)\]$', reply, re.IGNORECASE)
+    if m:
+        q = m.group(1)
+        return jsonify({"type": "image", "image_url": fetch_image(q), "query": q})
+
+    return jsonify({"reply": reply, "audio": eleven_tts(reply)})
+
+
+def eleven_tts(text):
     try:
-
-        data = request.get_json(force=True)
-
-        msg = data.get("message","")
-
-        history.append({
-            "role":"user",
-            "content":msg
-        })
-
-        messages = [
-            {"role":"system","content":SYSTEM}
-        ] + history
-
-        search = web_search(msg)
-
-        if search:
-            messages.insert(1,{
-                "role":"system",
-                "content":"Latest web info:\n"+search
-            })
-
-        resp = client.chat.completions.create(
-            model="llama3-70b-8192",
-            messages=messages,
-            max_tokens=300,
-            temperature=0.7
+        clean = text
+        while '```' in clean:
+            s = clean.find('```')
+            e = clean.find('```', s + 3)
+            if e == -1: break
+            clean = clean[:s] + ' code block. ' + clean[e+3:]
+        clean = clean.replace('**', '').replace('`', '').strip()
+        if not clean: return None
+        ag = eleven.text_to_speech.convert(
+            voice_id="21m00Tcm4TlvDq8ikWAM",
+            model_id="eleven_multilingual_v2",
+            text=clean,
+            output_format="mp3_44100_128",
         )
-
-        reply = resp.choices[0].message.content.strip()
-
-        history.append({
-            "role":"assistant",
-            "content":reply
-        })
-
-        img_match = re.match(r'^\[IMAGE:(.*?)\]$', reply, re.IGNORECASE)
-
-        if img_match:
-
-            q = img_match.group(1)
-
-            img = fetch_image(q)
-
-            return jsonify({
-                "type":"image",
-                "image_url":img,
-                "query":q
-            })
-
-        audio = eleven_tts(reply)
-
-        return jsonify({
-            "reply":reply,
-            "audio":audio
-        })
-
+        ab = b"".join(ag)
+        if not ab: return None
+        print("ElevenLabs OK -- " + str(len(ab)) + " bytes")
+        return base64.b64encode(ab).decode()
     except Exception as e:
+        print("ElevenLabs ERROR: " + str(e))
+        return None
 
-        print("CHAT ERROR:", e)
 
-        return jsonify({
-            "reply":"Server error: "+str(e)
+def web_search(query):
+    if not TAVILY_API_KEY: return None
+    try:
+        payload = json.dumps({
+            "api_key": TAVILY_API_KEY, "query": query, "max_results": 3
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.tavily.com/search", data=payload,
+            headers={"Content-Type": "application/json"}, method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=8) as r:
+            d = json.loads(r.read().decode())
+        if d.get("answer"): return d["answer"]
+        return " ".join([x.get("content", "")[:200] for x in d.get("results", [])])
+    except Exception as e:
+        print("Search error: " + str(e))
+        return None
+
+
+def fetch_image(query):
+    try:
+        url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
+            "action": "query", "titles": query,
+            "prop": "pageimages", "pithumbsize": 600, "format": "json"
         })
+        with urllib.request.urlopen(url) as r:
+            d = json.loads(r.read().decode())
+        for page in d["query"]["pages"].values():
+            if "thumbnail" in page: return page["thumbnail"]["source"]
+    except: pass
+    return None
 
-
-# ================= START SERVER =================
 
 if __name__ == "__main__":
-
-    port = int(os.environ.get("PORT",5000))
-
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
