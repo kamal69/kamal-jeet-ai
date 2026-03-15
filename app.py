@@ -1,12 +1,17 @@
 import os, base64, urllib.request, urllib.parse, re, json
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from dotenv import load_dotenv
 from groq import Groq
 from elevenlabs.client import ElevenLabs
 
 load_dotenv()
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(
+    __name__,
+    static_folder=os.path.join(BASE_DIR, "static"),
+    template_folder=os.path.join(BASE_DIR, "templates")
+)
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -24,12 +29,15 @@ SYSTEM = (
 
 @app.route("/")
 def home():
-    return send_from_directory("templates", "index.html")
-
+    return send_from_directory(
+        os.path.join(BASE_DIR, "templates"), "index.html"
+    )
 
 @app.route("/static/<path:filename>")
 def static_files(filename):
-    return send_from_directory("static", filename)
+    return send_from_directory(
+        os.path.join(BASE_DIR, "static"), filename
+    )
 
 
 @app.route("/clear", methods=["POST"])
