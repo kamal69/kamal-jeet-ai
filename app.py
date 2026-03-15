@@ -1,9 +1,9 @@
 import os
 import base64
+import json
+import re
 import urllib.request
 import urllib.parse
-import re
-import json
 
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
@@ -17,7 +17,6 @@ app = Flask(__name__)
 # API KEYS
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
 client = Groq(api_key=GROQ_API_KEY)
 eleven = ElevenLabs(api_key=ELEVEN_API_KEY)
@@ -25,12 +24,12 @@ eleven = ElevenLabs(api_key=ELEVEN_API_KEY)
 history = []
 
 SYSTEM = """
-You are KJ Master AI - a friendly AI assistant.
-You understand Hindi, English and Hinglish.
-Keep replies short and natural.
+You are KJ Master AI.
+Speak Hindi, English, Hinglish.
+Keep replies short.
 """
 
-# ================= HTML =================
+# ================= SIMPLE UI =================
 
 HTML = """
 <!DOCTYPE html>
@@ -60,13 +59,8 @@ padding:20px;
 margin:10px 0;
 }
 
-.user{
-color:#7dd3fc;
-}
-
-.ai{
-color:#fbbf24;
-}
+.user{color:#7dd3fc}
+.ai{color:#fbbf24}
 
 #box{
 display:flex;
@@ -121,7 +115,17 @@ headers:{"Content-Type":"application/json"},
 body:JSON.stringify({message:msg})
 })
 
-const data=await res.json()
+const text=await res.text()
+
+let data
+
+try{
+data=JSON.parse(text)
+}catch{
+console.log(text)
+add("ai","Server returned HTML error")
+return
+}
 
 add("ai",data.reply)
 
@@ -145,119 +149,39 @@ document.getElementById("chat").appendChild(div)
 </html>
 """
 
-# ================= WEB SEARCH =================
-
-def web_search(query):
-
-    if not TAVILY_API_KEY:
-        return None
-
-    try:
-
-        payload = json.dumps({
-            "api_key": TAVILY_API_KEY,
-            "query": query,
-            "max_results": 3
-        }).encode()
-
-        req = urllib.request.Request(
-            "https://api.tavily.com/search",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-
-        with urllib.request.urlopen(req, timeout=8) as r:
-
-            data = json.loads(r.read().decode())
-
-        if data.get("answer"):
-            return data["answer"]
-
-    except:
-        return None
-
-
-# ================= IMAGE =================
-
-def fetch_image(query):
-
-    try:
-
-        url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
-            "action":"query",
-            "titles":query,
-            "prop":"pageimages",
-            "pithumbsize":600,
-            "format":"json"
-        })
-
-        with urllib.request.urlopen(url) as r:
-
-            data = json.loads(r.read().decode())
-
-        for page in data["query"]["pages"].values():
-
-            if "thumbnail" in page:
-
-                return page["thumbnail"]["source"]
-
-    except:
-        pass
-
-    return None
-
-
-# ================= TTS =================
-
-def eleven_tts(text):
-
-    if not ELEVEN_API_KEY:
-        return None
-
-    try:
-
-        audio = eleven.text_to_speech.convert(
-            voice_id="21m00Tcm4TlvDq8ikWAM",
-            model_id="eleven_multilingual_v2",
-            text=text
-        )
-
-        audio_bytes = b"".join(audio)
-
-        return base64.b64encode(audio_bytes).decode()
-
-    except:
-        return None
-
-
-# ================= ROUTES =================
+# ================= HOME =================
 
 @app.route("/")
 def home():
-
     return render_template_string(HTML)
 
+# ================= HEALTH =================
+
+@app.route("/health")
+def health():
+    return "OK"
+
+# ================= CHAT =================
 
 @app.route("/chat", methods=["POST"])
 def chat():
 
     try:
 
-        data = request.get_json(force=True)
+        data=request.get_json(force=True)
 
-        msg = data.get("message","")
+        msg=data.get("message","")
 
         history.append({"role":"user","content":msg})
 
         messages=[{"role":"system","content":SYSTEM}]+history
 
-        resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        resp=client.chat.completions.create(
+            model="llama3-70b-8192",
             messages=messages
         )
 
-        reply = resp.choices[0].message.content
+        reply=resp.choices[0].message.content
 
         history.append({"role":"assistant","content":reply})
 
@@ -271,10 +195,9 @@ def chat():
             "reply":"Server error: "+str(e)
         })
 
-
 # ================= START =================
 
-if __name__ == "__main__":
+if __name__=="__main__":
 
     port=int(os.environ.get("PORT",5000))
 
