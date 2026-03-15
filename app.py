@@ -688,7 +688,6 @@ function esc(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/
 
 // ── Render markdown-like text ──
 function renderText(raw){
-  if(!raw) return '';          // guard: undefined/null crash fix
   let html='';
   const parts = raw.split(/(```[\s\S]*?```)/g);
   parts.forEach(part=>{
@@ -751,7 +750,6 @@ function addUserMsg(text){
 }
 
 function addAiMsg(text){
-  text = text || '';           // guard: undefined/null crash fix
   // Remove typing indicator if present
   const t=document.getElementById('typing');
   if(t) t.remove();
@@ -817,32 +815,9 @@ async function send(){
       if(isTalkMode) startListening();
       return;
     }
-    const reply = data.reply || '';
-    addAiMsg(reply);
-
-    // Play ElevenLabs audio if available, else browser TTS
-    // After audio ends → restart mic if Talk Mode is ON
-    if(data.audio){
-      if(currentAudio){ currentAudio.pause(); currentAudio=null; }
-      window.speechSynthesis.cancel();
-      const audio = new Audio('data:audio/mp3;base64,'+data.audio);
-      currentAudio = audio;
-      setStatus('🔊 Speaking…');
-      audio.onended = ()=>{
-        currentAudio = null;
-        setStatus('Ready');
-        if(isTalkMode) startListening();
-      };
-      audio.onerror = ()=>{
-        currentAudio = null;
-        speakText(reply, ()=>{ if(isTalkMode) startListening(); });
-      };
-      audio.play().catch(()=>{
-        speakText(reply, ()=>{ if(isTalkMode) startListening(); });
-      });
-    } else {
-      speakText(reply, ()=>{ if(isTalkMode) startListening(); });
-    }
+    addAiMsg(data.reply);
+    // Use browser TTS directly — no server audio needed
+    if(data.audio){ const audio=new Audio('data:audio/mp3;base64,'+data.audio); audio.play(); }
   } catch(e){
     const t=document.getElementById('typing'); if(t) t.remove();
     addAiMsg('❌ Error: '+e.message);
@@ -853,7 +828,6 @@ async function send(){
 
 // ── Browser TTS (Web Speech API — works on ALL browsers) ──────────
 function speakText(text, onEnd){
-  if(!text){ if(onEnd) onEnd(); return; }  // guard: undefined crash fix
   window.speechSynthesis.cancel();
 
   // Clean markdown for speech
@@ -866,52 +840,30 @@ function speakText(text, onEnd){
 
   if(!clean){ if(onEnd) onEnd(); return; }
 
-  // Split into short chunks — Android Chrome silently stops on long text
-  const sentences = clean.match(/[^।!?.]+[।!?.]?/g) || [clean];
-  const chunks = [];
-  let cur = '';
-  sentences.forEach(s => {
-    if((cur+s).length > 180){ if(cur) chunks.push(cur.trim()); cur=s; }
-    else cur += s;
-  });
-  if(cur.trim()) chunks.push(cur.trim());
+  const utter = new SpeechSynthesisUtterance(clean);
+  const isHindi = /[\u0900-\u097F]/.test(clean);
+  const voices  = window.speechSynthesis.getVoices();
 
-  const voices = window.speechSynthesis.getVoices();
-  let idx = 0;
-
-  // keepAlive: Android Chrome pauses synthesis silently after ~15s
-  const keepAlive = setInterval(()=>{
-    if(!window.speechSynthesis.speaking){ clearInterval(keepAlive); return; }
-    window.speechSynthesis.pause();
-    window.speechSynthesis.resume();
-  }, 10000);
-
-  function speakNext(){
-    if(idx >= chunks.length){
-      clearInterval(keepAlive); setStatus('Ready'); if(onEnd) onEnd(); return;
-    }
-    const utter = new SpeechSynthesisUtterance(chunks[idx++]);
-    const isHindi = /[\u0900-\u097F]/.test(utter.text);
-    let voice = null;
-    if(isHindi){
-      voice = voices.find(v => v.lang.startsWith('hi')) || null;
-    } else {
-      voice = voices.find(v => v.lang === 'en-IN')
-           || voices.find(v => v.lang.startsWith('en-IN'))
-           || voices.find(v => v.lang.startsWith('en-US') && v.localService)
-           || voices.find(v => v.lang.startsWith('en'))
-           || null;
-    }
-    if(voice) utter.voice = voice;
-    utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
-    utter.rate   = 0.92; utter.pitch = 1.0; utter.volume = 1.0;
-    utter.onend  = speakNext;
-    utter.onerror = ()=>{ clearInterval(keepAlive); setStatus('Ready'); if(onEnd) onEnd(); };
-    window.speechSynthesis.speak(utter);
+  let voice = null;
+  if(isHindi){
+    voice = voices.find(v => v.lang.startsWith('hi')) || null;
+  } else {
+    voice = voices.find(v => v.lang === 'en-IN')
+         || voices.find(v => v.lang.startsWith('en-IN'))
+         || voices.find(v => v.lang.startsWith('en-US') && v.localService)
+         || voices.find(v => v.lang.startsWith('en'))
+         || null;
   }
+  if(voice) utter.voice = voice;
+  utter.lang   = isHindi ? 'hi-IN' : 'en-IN';
+  utter.rate   = 0.92;
+  utter.pitch  = 1.0;
+  utter.volume = 1.0;
 
   setStatus('🔊 Speaking…');
-  speakNext();
+  utter.onend  = ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
+  utter.onerror= ()=>{ setStatus('Ready'); if(onEnd) onEnd(); };
+  window.speechSynthesis.speak(utter);
 }
 
 // Preload voices
@@ -1179,3 +1131,17 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT",5000))
 
     app.run(host="0.0.0.0", port=port)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
