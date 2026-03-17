@@ -124,18 +124,25 @@ def eleven_tts(text):
         if not clean:
             return None
 
-        ag = eleven.text_to_speech.convert(
-            voice_id="zgqefOY5FPQ3bB7OZTVR",   # Aria — best Hindi/Hinglish voice
-            model_id="eleven_multilingual_v2",   # Much more natural for Hindi
-            text=clean,
-            output_format="mp3_44100_128",
-            voice_settings=VoiceSettings(
-                    stability=0.45,          # 0.3 se thoda zyada → kam robotic, zyada consistent
-                    similarity_boost=0.80,   # thoda boost do natural tone ko
-                    style=0.35,              # style kam rakho agar over-dramatic nahi chahiye
-                    use_speaker_boost=True
-            )
-        )
+       ag = eleven.text_to_speech.convert(
+    voice_id="zT03pEAEi0VHKciJODfn",  # Raju — Clear, Natural aur Warm (sabse zyada human-like Hindi ke liye 2026 mein top)
+    # Alternative: "IvLWq57RKibBrqZGpQrC"  # Leo (agar energetic vibe chahiye)
+    # Ya Akash ke liye dashboard se check kar lo (neutral conversational killer)
+
+    model_id="eleven_multilingual_v2",  # Yeh best hai Hindi/Hinglish ke liye — natural prosody aur emotion deta hai (Turbo se better quality)
+    # Note: eleven_turbo_v2_5 fast hai lekin quality thodi kam, multilingual_v2 zyada lifelike
+
+    text=clean,
+    output_format="mp3_44100_128",  # Yeh perfect rahega quality ke liye
+
+    voice_settings=VoiceSettings(
+        stability=0.50,          # 0.45–0.55 best range: natural variation + consistency (bahut low se robotic/unnatural ho jata hai)
+        similarity_boost=0.85,   # 0.80–0.90: voice ki personality strong aur realistic banti hai, robotic tone ko crush karta hai
+        style=0.25,              # 0.20–0.35: kam rakho taaki over-dramatic/exaggerated na lage — casual baat ke liye ideal
+        use_speaker_boost=True   # Yeh on rakho, breathing aur natural pauses improve karta hai
+    )
+)
+        
         ab = b"".join(ag)
         if not ab:
             return None
