@@ -130,10 +130,10 @@ def eleven_tts(text):
             text=clean,
             output_format="mp3_44100_128",
             voice_settings=VoiceSettings(
-                stability=0.45,
-                similarity_boost=0.80,
-                style=0.35,
-                use_speaker_boost=True
+                    stability=0.45,          # 0.3 se thoda zyada → kam robotic, zyada consistent
+                    similarity_boost=0.80,   # thoda boost do natural tone ko
+                    style=0.35,              # style kam rakho agar over-dramatic nahi chahiye
+                    use_speaker_boost=True
             )
         )
         ab = b"".join(ag)
