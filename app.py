@@ -110,9 +110,8 @@ def eleven_tts(text):
     try:
         from elevenlabs.client import ElevenLabs
         from elevenlabs import VoiceSettings
-
         eleven = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
-
+        
         clean = text
         while '```' in clean:
             s = clean.find('```')
@@ -123,31 +122,31 @@ def eleven_tts(text):
         clean = clean.replace('**', '').replace('`', '').strip()
         if not clean:
             return None
-
-       ag = eleven.text_to_speech.convert(
-    voice_id="zT03pEAEi0VHKciJODfn",  # Raju — Clear, Natural aur Warm (sabse zyada human-like Hindi ke liye 2026 mein top)
-    # Alternative: "IvLWq57RKibBrqZGpQrC"  # Leo (agar energetic vibe chahiye)
-    # Ya Akash ke liye dashboard se check kar lo (neutral conversational killer)
-
-    model_id="eleven_multilingual_v2",  # Yeh best hai Hindi/Hinglish ke liye — natural prosody aur emotion deta hai (Turbo se better quality)
-    # Note: eleven_turbo_v2_5 fast hai lekin quality thodi kam, multilingual_v2 zyada lifelike
-
-    text=clean,
-    output_format="mp3_44100_128",  # Yeh perfect rahega quality ke liye
-
-    voice_settings=VoiceSettings(
-        stability=0.50,          # 0.45–0.55 best range: natural variation + consistency (bahut low se robotic/unnatural ho jata hai)
-        similarity_boost=0.85,   # 0.80–0.90: voice ki personality strong aur realistic banti hai, robotic tone ko crush karta hai
-        style=0.25,              # 0.20–0.35: kam rakho taaki over-dramatic/exaggerated na lage — casual baat ke liye ideal
-        use_speaker_boost=True   # Yeh on rakho, breathing aur natural pauses improve karta hai
-    )
-)
+        
+        ag = eleven.text_to_speech.convert(
+            voice_id="zT03pEAEi0VHKciJODfn",  # Raju — sabse natural, warm aur relatable Hindi male (2026 top pick)
+            # Alternative agar change karna ho: "IvLWq57RKibBrqZGpQrC"  # Leo — energetic vibe ke liye
+            
+            model_id="eleven_multilingual_v2",  # Best for Hindi/Hinglish — natural emotion, prosody aur flow
+            
+            text=clean,
+            output_format="mp3_44100_128",  # High quality without too much size
+            
+            voice_settings=VoiceSettings(
+                stability=0.50,          # Ideal: natural variation + consistent (robotic monotone khatam)
+                similarity_boost=0.88,   # Thoda zyada boost → personality strong, robotic artifacts gone
+                style=0.25,              # Low for casual, non-dramatic dost jaisi baat
+                use_speaker_boost=True   # Breathing, pauses aur human feel improve karta hai
+            )
+        )
         
         ab = b"".join(ag)
         if not ab:
             return None
+        
         print("ElevenLabs OK -- " + str(len(ab)) + " bytes")
         return base64.b64encode(ab).decode()
+    
     except Exception as e:
         print("ElevenLabs ERROR: " + str(e))
         return None
