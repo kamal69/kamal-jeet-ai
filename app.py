@@ -125,14 +125,14 @@ def eleven_tts(text):
             return None
 
         ag = eleven.text_to_speech.convert(
-            voice_id="TX3LPaxmHKxFdv7VOQHJ",
-            model_id="eleven_turbo_v2_5",
+            voice_id="21m00Tcm4TlvDq8ikWAM",   # Aria — best Hindi/Hinglish voice
+            model_id="eleven_multilingual_v2",   # Much more natural for Hindi
             text=clean,
             output_format="mp3_44100_128",
             voice_settings=VoiceSettings(
-                stability=0.30,
-                similarity_boost=0.75,
-                style=0.45,
+                stability=0.45,
+                similarity_boost=0.80,
+                style=0.35,
                 use_speaker_boost=True
             )
         )
