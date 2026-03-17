@@ -234,8 +234,20 @@ function doSend(){
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg })
     })
-    .then(function(r){ return r.json(); })
+    .then(function(r){
+        if(!r.ok){ return r.json().catch(function(){ return {error: 'Server error ' + r.status}; }); }
+        return r.json();
+    })
     .then(function(d){
+        // Handle error response from server
+        if(d.error){
+            var tr = document.getElementById('tr');
+            if(tr){ tr.remove(); }
+            addAI('⚠️ Error: ' + d.error);
+            setSt('Error');
+            if(isTM){ startL(); }
+            return;
+        }
         if(d.type === 'image'){
             if(d.image_url){ addImg(d.image_url, d.query || ''); }
             else { addAI('Image nahi mili: ' + (d.query || '')); }
@@ -244,6 +256,14 @@ function doSend(){
             return;
         }
         var rep = d.reply || '';
+        if(!rep){
+            var tr = document.getElementById('tr');
+            if(tr){ tr.remove(); }
+            addAI('⚠️ Koi response nahi mila. Dobara try karo.');
+            setSt('Ready');
+            if(isTM){ startL(); }
+            return;
+        }
         addAI(rep);
         if(d.audio){
             if(curAud){ curAud.pause(); curAud = null; }
@@ -255,13 +275,14 @@ function doSend(){
             au.onerror = function(){ curAud = null; spk(rep, function(){ if(isTM){ startL(); } }); };
             au.play().catch(function(){ spk(rep, function(){ if(isTM){ startL(); } }); });
         } else {
+            setSt('Ready');
             spk(rep, function(){ if(isTM){ startL(); } });
         }
     })
     .catch(function(e){
         var tr = document.getElementById('tr');
         if(tr){ tr.remove(); }
-        addAI('Error: ' + e.message);
+        addAI('⚠️ Network Error: ' + e.message);
         setSt('Error');
         if(isTM){ startL(); }
     });
@@ -294,12 +315,12 @@ function spk(text, onEnd){
     var chunks = [];
     var cur = '';
     for(var w = 0; w < words.length; w++){
-        var nxt = cur ? cur + ' ' + words[w] : words[w];
-        if(nxt.length > 150){
+        var candidate = cur ? cur + ' ' + words[w] : words[w];
+        if(candidate.length > 150){
             if(cur){ chunks.push(cur); }
             cur = words[w];
         } else {
-            cur = nxt;
+            cur = candidate;
         }
     }
     if(cur){ chunks.push(cur); }
@@ -317,7 +338,7 @@ function spk(text, onEnd){
         window.speechSynthesis.resume();
     }, 10000);
 
-    function nxt(){
+    function speakNext(){
         if(idx >= chunks.length){
             clearInterval(ka);
             setSt('Ready');
@@ -343,14 +364,14 @@ function spk(text, onEnd){
         }
         if(v){ u.voice = v; }
         u.lang = isH ? 'hi-IN' : 'en-IN';
-        u.rate = 0.92; u.pitch = 1.0; u.volume = 1.0;
-        u.onend = nxt;
+        u.rate = 0.82; u.pitch = 1.08; u.volume = 1.0;
+        u.onend = speakNext;
         u.onerror = function(){ clearInterval(ka); setSt('Ready'); if(onEnd){ onEnd(); } };
         window.speechSynthesis.speak(u);
     }
 
     setSt('Speaking...');
-    nxt();
+    speakNext();
 }
 
 if(window.speechSynthesis && window.speechSynthesis.onvoiceschanged !== undefined){
