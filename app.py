@@ -1,17 +1,12 @@
 import os, base64, urllib.request, urllib.parse, re, json
-from flask import Flask, request, jsonify, send_from_directory, Response
+from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
 from groq import Groq
 from elevenlabs.client import ElevenLabs
 
 load_dotenv()
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-app = Flask(
-    __name__,
-    static_folder=os.path.join(BASE_DIR, "static"),
-    template_folder=os.path.join(BASE_DIR, "templates")
-)
+app = Flask(__name__)
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -29,15 +24,12 @@ SYSTEM = (
 
 @app.route("/")
 def home():
-    return send_from_directory(
-        os.path.join(BASE_DIR, "templates"), "index.html"
-    )
+    return send_from_directory("templates", "index.html")
+
 
 @app.route("/static/<path:filename>")
 def static_files(filename):
-    return send_from_directory(
-        os.path.join(BASE_DIR, "static"), filename
-    )
+    return send_from_directory("static", filename)
 
 
 @app.route("/clear", methods=["POST"])
@@ -60,7 +52,7 @@ def chat():
         messages.insert(1, {"role": "system", "content": "Web info:\n" + sr})
 
     resp = client.chat.completions.create(
-        model="llama3-70b-8192",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         max_tokens=300,
         temperature=0.7
