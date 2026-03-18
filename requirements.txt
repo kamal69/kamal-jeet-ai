@@ -3,3 +3,4 @@ gunicorn
 groq
 python-dotenv
 elevenlabs
+google-generativeai
