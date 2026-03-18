@@ -267,10 +267,46 @@ def google_search(query):
 
 
 # ============================================================
-# 🖼️ IMAGE FETCH  (Google Custom Search Images)
+# 🖼️ IMAGE FETCH  (Multi-method, no extra API key needed)
 # ============================================================
 def fetch_image(query):
-    # Method 1: Google Custom Search Image API
+
+    # Method 1: Wikimedia / Wikipedia thumbnail (FREE, accurate for famous things)
+    try:
+        search_url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
+            "action":      "query",
+            "titles":      query,
+            "prop":        "pageimages",
+            "format":      "json",
+            "pithumbsize": 600,
+            "redirects":   1
+        })
+        req = urllib.request.Request(search_url, headers={"User-Agent": "SarthiAI/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode())
+        pages = data.get("query", {}).get("pages", {})
+        for page in pages.values():
+            thumb = page.get("thumbnail", {}).get("source")
+            if thumb:
+                print("IMAGE: Wikipedia hit ->", thumb)
+                return thumb
+    except Exception as e:
+        print("WIKIPEDIA ERROR:", e)
+
+    # Method 2: DuckDuckGo instant answer image (FREE, no key)
+    try:
+        ddg_url = "https://api.duckduckgo.com/?q=" + urllib.parse.quote(query) + "&format=json"
+        req = urllib.request.Request(ddg_url, headers={"User-Agent": "SarthiAI/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode())
+        image = data.get("Image") or data.get("image")
+        if image and str(image).startswith("http"):
+            print("IMAGE: DuckDuckGo hit ->", image)
+            return image
+    except Exception as e:
+        print("DDG ERROR:", e)
+
+    # Method 3: Google Custom Search (if keys available)
     if GOOGLE_API_KEY and GOOGLE_CSE_ID:
         try:
             params = urllib.parse.urlencode({
@@ -286,11 +322,27 @@ def fetch_image(query):
                 data = json.loads(r.read().decode())
             items = data.get("items", [])
             if items:
-                return items[0].get("link", None)
+                img_url = items[0].get("link")
+                print("IMAGE: Google CSE hit ->", img_url)
+                return img_url
         except Exception as e:
-            print("IMAGE SEARCH ERROR:", e)
+            print("GOOGLE IMAGE ERROR:", e)
 
-    # Method 2: Fallback — Picsum (always works, random beautiful photos)
+    # Method 4: Lexica AI art (FREE, no key, beautiful images)
+    try:
+        lex_url = "https://lexica.art/api/v1/search?q=" + urllib.parse.quote(query)
+        req = urllib.request.Request(lex_url, headers={"User-Agent": "SarthiAI/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode())
+        images = data.get("images", [])
+        if images:
+            src = images[0].get("src")
+            print("IMAGE: Lexica hit ->", src)
+            return src
+    except Exception as e:
+        print("LEXICA ERROR:", e)
+
+    # Method 5: Last resort — Picsum random photo
     seed = abs(hash(query)) % 1000
     return f"https://picsum.photos/seed/{seed}/600/400"
 
