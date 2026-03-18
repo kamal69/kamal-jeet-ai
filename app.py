@@ -59,7 +59,7 @@ def chat():
         # 🔍 Google Search
         sr = web_search(msg)
 
-        # 🧠 Prompt Build (Gemini style)
+        # 🧠 Prompt Build
         prompt = SYSTEM + "\n\n"
 
         if sr:
@@ -68,8 +68,8 @@ def chat():
         for h in history:
             prompt += f"{h['role'].upper()}: {h['content']}\n"
 
-        # 🚀 Gemini Response
-        model = genai.GenerativeModel("models/gemini-1.5-flash-latest")
+        # ✅ FIXED: Correct Gemini model name
+        model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content(prompt)
 
         reply = response.text.strip() if response.text else "Kuch issue aaya, dobara try karo."
