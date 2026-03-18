@@ -267,13 +267,32 @@ def google_search(query):
 
 
 # ============================================================
-# 🖼️ IMAGE FETCH
+# 🖼️ IMAGE FETCH  (Google Custom Search Images)
 # ============================================================
 def fetch_image(query):
-    try:
-        return "https://source.unsplash.com/600x400/?" + urllib.parse.quote(query)
-    except:
-        return None
+    # Method 1: Google Custom Search Image API
+    if GOOGLE_API_KEY and GOOGLE_CSE_ID:
+        try:
+            params = urllib.parse.urlencode({
+                "key":        GOOGLE_API_KEY,
+                "cx":         GOOGLE_CSE_ID,
+                "q":          query,
+                "searchType": "image",
+                "num":        1,
+                "safe":       "active"
+            })
+            url = "https://www.googleapis.com/customsearch/v1?" + params
+            with urllib.request.urlopen(url, timeout=8) as r:
+                data = json.loads(r.read().decode())
+            items = data.get("items", [])
+            if items:
+                return items[0].get("link", None)
+        except Exception as e:
+            print("IMAGE SEARCH ERROR:", e)
+
+    # Method 2: Fallback — Picsum (always works, random beautiful photos)
+    seed = abs(hash(query)) % 1000
+    return f"https://picsum.photos/seed/{seed}/600/400"
 
 
 # ============================================================
