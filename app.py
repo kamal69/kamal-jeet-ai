@@ -69,7 +69,7 @@ def chat():
             prompt += f"{h['role'].upper()}: {h['content']}\n"
 
         # 🚀 Gemini Response
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-1.5-flash-latest")
         response = model.generate_content(prompt)
 
         reply = response.text.strip() if response.text else "Kuch issue aaya, dobara try karo."
