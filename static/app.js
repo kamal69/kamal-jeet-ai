@@ -60,11 +60,6 @@ function setSt(m){
     document.getElementById('st').textContent = m;
 }
 
-function setRobotSpeaking(on){
-    var mouth = document.getElementById('robot-mouth');
-    if(mouth){ mouth.classList.toggle('speaking', on); }
-}
-
 function safeCan(){
     try {
         if(window.speechSynthesis){ window.speechSynthesis.cancel(); }
@@ -168,96 +163,28 @@ function addUser(t){
     scrollD();
 }
 
-// ============================================================
-// 🤖 ROBOT TYPEWRITER EFFECT
-// ============================================================
-function addAI(fullText, onDone){
+function getMoodTag(text){
+    var t = (text||'').toLowerCase();
+    if(/```|code|python|javascript|function|def |class |error|bug|html|css/.test(t))
+        return '<div class="mood-tag mood-code">&#128187; Code</div>';
+    if(/haha|lol|mast|zabardast|amazing|great|sahi|badiya|awesome|wah bhai|yaar|maza/.test(t))
+        return '<div class="mood-tag mood-happy">&#128516; Mast!</div>';
+    if(/hmm|soch|matlab|actually|lekin|but|agar|interesting|iska matlab|yani/.test(t))
+        return '<div class="mood-tag mood-think">&#129300; Soch ke</div>';
+    if(/arre|kya baat|really|seriously|wah|wow|shocking|sun yaar|sach mein/.test(t))
+        return '<div class="mood-tag mood-surp">&#128562; Arre!</div>';
+    return '<div class="mood-tag mood-normal">&#129302; Sarthi</div>';
+}
+
+function addAI(t){
     var tr = document.getElementById('tr');
     if(tr){ tr.remove(); }
-
     var r = document.createElement('div');
     r.className = 'rw';
-
-    // Robot prefix badge
-    var bbDiv = document.createElement('div');
-    bbDiv.className = 'bb';
-
-    r.innerHTML = '<div class="av ai">S</div>';
-    r.appendChild(bbDiv);
+    var moodTag = getMoodTag(t || '');
+    r.innerHTML = '<div class="av ai">S</div><div class="bb">' + moodTag + renderMD(t || '') + '</div>';
     ch.appendChild(r);
     scrollD();
-
-    // Check if reply has code blocks — render instantly if so
-    var hasCodeBlock = fullText.indexOf('```') !== -1;
-
-    if(hasCodeBlock){
-        // Code blocks: render instantly (can't typewrite HTML safely)
-        bbDiv.innerHTML = renderMD(fullText);
-        scrollD();
-        if(onDone){ onDone(); }
-        return;
-    }
-
-    // Plain text: Robot typewriter character by character
-    var displayed = '';
-    var i = 0;
-    var speed = 18; // ms per character — robot speed
-
-    // Blinking cursor element
-    var cursor = document.createElement('span');
-    cursor.className = 'robot-cursor';
-    cursor.textContent = '▮';
-    bbDiv.appendChild(cursor);
-
-    function typeNext(){
-        if(i >= fullText.length){
-            // Done — remove cursor, render final markdown
-            cursor.remove();
-            bbDiv.innerHTML = renderMD(fullText);
-            scrollD();
-            if(onDone){ onDone(); }
-            return;
-        }
-
-        // Take next character
-        displayed += fullText[i];
-        i++;
-
-        // Render partial markdown inline for bold/code, else plain
-        // For typewriter: just show raw text with cursor at end
-        bbDiv.innerHTML = '';
-
-        // Show partial rendered text
-        var textNode = document.createElement('span');
-        textNode.className = 'robot-typing';
-        // Simple partial render — just escape and show
-        textNode.innerHTML = escH(displayed).replace(/\n/g, '<br>');
-        bbDiv.appendChild(textNode);
-
-        // Re-attach blinking cursor
-        var c2 = document.createElement('span');
-        c2.className = 'robot-cursor';
-        c2.textContent = '▮';
-        bbDiv.appendChild(c2);
-        cursor = c2;
-
-        scrollD();
-
-        // Slightly vary speed for robot feel
-        var delay = speed;
-        // Pause longer at punctuation
-        var ch2 = fullText[i-1];
-        if(ch2 === '.' || ch2 === '!' || ch2 === '?' || ch2 === '\n'){
-            delay = speed * 6;
-        } else if(ch2 === ',' || ch2 === ';' || ch2 === ':'){
-            delay = speed * 3;
-        }
-
-        setTimeout(typeNext, delay);
-    }
-
-    // Small initial delay before robot starts "thinking"
-    setTimeout(typeNext, 120);
 }
 
 function addTyping(){
@@ -326,6 +253,7 @@ function doSend(){
         return r.json();
     })
     .then(function(d){
+        // Handle error response from server
         if(d.error){
             var tr = document.getElementById('tr');
             if(tr){ tr.remove(); }
@@ -350,26 +278,20 @@ function doSend(){
             if(isTM){ startL(); }
             return;
         }
-
-        setSt('Typing...');
-
-        // Robot typewriter — audio plays AFTER typing done
-        addAI(rep, function(){
+        addAI(rep);
+        if(d.audio){
+            if(curAud){ curAud.pause(); curAud = null; }
+            safeCan();
+            var au = new Audio('data:audio/mp3;base64,' + d.audio);
+            curAud = au;
+            setSt('Speaking...');
+            au.onended = function(){ curAud = null; setSt('Ready'); if(isTM){ startL(); } };
+            au.onerror = function(){ curAud = null; spk(rep, function(){ if(isTM){ startL(); } }); };
+            au.play().catch(function(){ spk(rep, function(){ if(isTM){ startL(); } }); });
+        } else {
             setSt('Ready');
-            if(d.audio){
-                if(curAud){ curAud.pause(); curAud = null; }
-                safeCan();
-                var au = new Audio('data:audio/mp3;base64,' + d.audio);
-                curAud = au;
-                setSt('Speaking...');
-                setRobotSpeaking(true);
-                au.onended = function(){ curAud = null; setSt('Ready'); setRobotSpeaking(false); if(isTM){ startL(); } };
-                au.onerror = function(){ curAud = null; setRobotSpeaking(false); spk(rep, function(){ if(isTM){ startL(); } }); };
-                au.play().catch(function(){ setRobotSpeaking(false); spk(rep, function(){ if(isTM){ startL(); } }); });
-            } else {
-                spk(rep, function(){ if(isTM){ startL(); } });
-            }
-        });
+            spk(rep, function(){ if(isTM){ startL(); } });
+        }
     })
     .catch(function(e){
         var tr = document.getElementById('tr');
@@ -387,6 +309,7 @@ function spk(text, onEnd){
     }
     safeCan();
 
+    // Clean text - remove code blocks
     var clean = '';
     var i = 0;
     while(i < text.length){
@@ -401,6 +324,7 @@ function spk(text, onEnd){
     clean = clean.split('**').join('').split('`').join('').trim();
     if(!clean){ if(onEnd){ onEnd(); } return; }
 
+    // Split into chunks by words
     var words = clean.split(' ');
     var chunks = [];
     var cur = '';
@@ -432,7 +356,6 @@ function spk(text, onEnd){
         if(idx >= chunks.length){
             clearInterval(ka);
             setSt('Ready');
-            setRobotSpeaking(false);
             if(onEnd){ onEnd(); }
             return;
         }
@@ -462,7 +385,6 @@ function spk(text, onEnd){
     }
 
     setSt('Speaking...');
-    setRobotSpeaking(true);
     speakNext();
 }
 
