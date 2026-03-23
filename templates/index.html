@@ -310,14 +310,7 @@ document.addEventListener('DOMContentLoaded',function(){
     };
   }
 
-  // Patch addAI to inject mood tag
-  if(typeof addAI==='function'){
-    var origAddAI=addAI;
-    window.addAI=function(text,onDone){
-      var tag=getMoodTag(text);
-      origAddAI(tag+text,onDone);
-    };
-  }
+  // mood tag handled in app.js getMoodTag()
 });
 </script>
 </body>
