@@ -76,52 +76,11 @@ body{background:var(--bg);color:var(--tx);font-family:'Sora',sans-serif;display:
 #snd:hover{background:var(--ac2)}
 .ht{text-align:center;font-size:11px;color:var(--mu);margin-top:8px}
 @media(max-width:640px){#sb{display:none}.rw{padding:12px 14px}#iw2{padding:12px 14px 16px}}
-
-/* 🤖 Robot Typewriter Cursor */
-.robot-cursor{display:inline-block;color:var(--ac);font-weight:700;font-size:15px;margin-left:1px;animation:rcblink 0.6s steps(1) infinite;}
-@keyframes rcblink{0%,100%{opacity:1}50%{opacity:0}}
-.robot-typing{font-family:'Sora',sans-serif;font-size:14.5px;line-height:1.75;color:var(--tx);letter-spacing:0.01em;}
-
-/* 🤖 Fixed Robot Avatar */
-#robot-avatar{
-  position:fixed;
-  bottom:90px;
-  right:22px;
-  width:80px;
-  z-index:100;
-  pointer-events:none;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:4px;
-}
-#robot-avatar svg{
-  filter:drop-shadow(0 4px 18px rgba(201,100,66,0.35));
-  transition:transform 0.3s ease;
-}
-#robot-avatar:hover svg{transform:scale(1.07) translateY(-3px);}
-#robot-name{
-  font-size:9px;
-  font-weight:600;
-  color:var(--ac);
-  letter-spacing:1.5px;
-  text-transform:uppercase;
-  opacity:0.8;
-}
-/* Blink eye animation */
-@keyframes robotBlink{
-  0%,92%,100%{transform:scaleY(1);}
-  95%{transform:scaleY(0.08);}
-}
-#robot-eye-l,#robot-eye-r{transform-origin:center;animation:robotBlink 4s ease-in-out infinite;}
-#robot-eye-r{animation-delay:0.08s;}
-/* Antenna pulse */
-@keyframes antPulse{0%,100%{opacity:0.5;r:3;}50%{opacity:1;r:4.5;}}
-#ant-dot{animation:antPulse 2s ease-in-out infinite;}
-/* Speaking animation */
-@keyframes mouthSpeak{0%,100%{d:path("M30 53 Q40 58 50 53");}50%{d:path("M30 53 Q40 62 50 53");}}
-#robot-mouth.speaking{animation:mouthSpeak 0.35s ease-in-out infinite;}
-@media(max-width:640px){#robot-avatar{display:none;}}
+#av-wrap{display:flex;flex-direction:column;align-items:center;padding:10px 4px 4px;border-top:1px solid var(--br);gap:3px;margin-top:auto;}
+#av-label{font-size:9px;color:var(--mu);letter-spacing:1.2px;text-transform:uppercase;font-weight:600;}
+#av-mood{font-size:10px;color:var(--ac);letter-spacing:.5px;height:14px;transition:color .3s;}
+#sav{filter:drop-shadow(0 4px 16px rgba(201,100,66,.18));transition:transform .35s ease;}
+#sav:hover{transform:scale(1.04) translateY(-2px);}
 </style>
 </head>
 <body>
@@ -147,6 +106,78 @@ body{background:var(--bg);color:var(--tx);font-family:'Sora',sans-serif;display:
         <div style="font-size:12.5px;font-weight:500">Kamal Jeet</div>
         <div style="font-size:11px;color:var(--mu)">Himachal Pradesh</div>
       </div>
+    </div>
+    <div id="av-wrap">
+      <svg id="sav" width="148" height="178" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="sk" cx="48%" cy="38%" r="58%"><stop offset="0%" stop-color="#D4956A"/><stop offset="70%" stop-color="#B8724E"/><stop offset="100%" stop-color="#9A5A30"/></radialGradient>
+          <radialGradient id="ir" cx="38%" cy="32%" r="56%"><stop offset="0%" stop-color="#6b3800"/><stop offset="100%" stop-color="#1a0800"/></radialGradient>
+          <linearGradient id="nk" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#8A4A28"/><stop offset="40%" stop-color="#B8724E"/><stop offset="100%" stop-color="#8A4A28"/></linearGradient>
+          <linearGradient id="jkt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a1a2e"/><stop offset="100%" stop-color="#0d0d1a"/></linearGradient>
+          <radialGradient id="bkL" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#d06050" stop-opacity=".25"/><stop offset="100%" stop-color="#d06050" stop-opacity="0"/></radialGradient>
+          <radialGradient id="bkR" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#d06050" stop-opacity=".25"/><stop offset="100%" stop-color="#d06050" stop-opacity="0"/></radialGradient>
+        </defs>
+        <path d="M30 210 Q50 190 80 184 Q100 180 120 184 Q150 190 170 210 L175 240 L25 240Z" fill="url(#jkt)"/>
+        <ellipse cx="100" cy="215" rx="72" ry="35" fill="url(#jkt)"/>
+        <path d="M88 184 Q100 192 112 182 Q108 194 100 198 Q92 194 88 184Z" fill="#555" opacity=".4"/>
+        <ellipse cx="100" cy="195" rx="14" ry="2.5" fill="none" stroke="#c8a020" stroke-width="1.2" opacity=".65"/>
+        <rect x="88" y="164" width="24" height="22" rx="7" fill="url(#nk)"/>
+        <ellipse cx="100" cy="108" rx="56" ry="60" fill="url(#sk)"/>
+        <path d="M58 125 Q62 160 100 168 Q138 160 142 125" fill="url(#sk)"/>
+        <ellipse cx="46" cy="112" rx="8" ry="11" fill="#B8724E"/><ellipse cx="46" cy="112" rx="4.5" ry="7" fill="#9A5A30"/>
+        <circle cx="46" cy="118" r="2.2" fill="#c8a020" opacity=".85"/>
+        <ellipse cx="154" cy="112" rx="8" ry="11" fill="#B8724E"/><ellipse cx="154" cy="112" rx="4.5" ry="7" fill="#9A5A30"/>
+        <circle cx="154" cy="118" r="2.2" fill="#c8a020" opacity=".85"/>
+        <!-- Honey Singh hair -->
+        <ellipse cx="100" cy="72" rx="56" ry="42" fill="#0d0806"/>
+        <path d="M44 80 Q46 60 56 50 Q44 55 42 80Z" fill="#0d0806"/>
+        <path d="M156 80 Q154 60 144 50 Q156 55 158 80Z" fill="#0d0806"/>
+        <path d="M55 68 Q58 42 70 34 Q85 26 100 28 Q115 26 130 34 Q142 42 145 68 Q130 55 100 53 Q70 55 55 68Z" fill="#1a0e06"/>
+        <path d="M65 60 Q72 30 85 22 Q78 32 80 48Z" fill="#0f0906"/>
+        <path d="M80 55 Q90 22 100 18 Q94 30 96 48Z" fill="#150c07"/>
+        <path d="M100 53 Q110 20 120 22 Q113 34 116 50Z" fill="#0f0906"/>
+        <path d="M117 58 Q128 28 136 34 Q127 40 124 56Z" fill="#0d0806"/>
+        <path d="M80 38 Q95 28 112 36" stroke="#3a2a18" stroke-width="2" fill="none" opacity=".45"/>
+        <path d="M44 80 Q45 68 52 62 Q48 72 46 90Z" fill="#0d0806" opacity=".8"/>
+        <path d="M156 80 Q155 68 148 62 Q152 72 154 90Z" fill="#0d0806" opacity=".8"/>
+        <!-- Eyebrows -->
+        <path id="bL" d="M62 93 Q74 87 84 90" stroke="#150c04" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+        <path id="bR" d="M116 90 Q126 87 138 93" stroke="#150c04" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+        <!-- Eyes -->
+        <ellipse cx="73" cy="111" rx="16" ry="10" fill="#8A4A28" opacity=".2"/>
+        <ellipse cx="127" cy="111" rx="16" ry="10" fill="#8A4A28" opacity=".2"/>
+        <ellipse id="ewL" cx="73" cy="111" rx="13" ry="8.5" fill="white"/>
+        <ellipse id="ewR" cx="127" cy="111" rx="13" ry="8.5" fill="white"/>
+        <circle id="irL" cx="73" cy="111" r="6" fill="url(#ir)"/>
+        <circle id="irR" cx="127" cy="111" r="6" fill="url(#ir)"/>
+        <circle id="puL" cx="73" cy="111" r="3.2" fill="#050200"/>
+        <circle id="puR" cx="127" cy="111" r="3.2" fill="#050200"/>
+        <circle cx="75" cy="108.5" r="1.6" fill="white" opacity=".9"/>
+        <circle cx="129" cy="108.5" r="1.6" fill="white" opacity=".9"/>
+        <ellipse id="ldL" cx="73" cy="111" rx="13" ry="1" fill="#B8724E" opacity="0"/>
+        <ellipse id="ldR" cx="127" cy="111" rx="13" ry="1" fill="#B8724E" opacity="0"/>
+        <path d="M60 111 Q73 103 86 111" stroke="#0d0806" stroke-width="1.8" fill="none" opacity=".8"/>
+        <path d="M114 111 Q127 103 140 111" stroke="#0d0806" stroke-width="1.8" fill="none" opacity=".8"/>
+        <!-- Nose -->
+        <path d="M95 118 Q92 132 88 136 Q94 141 100 140 Q106 141 112 136 Q108 132 105 118" fill="#9A5030" opacity=".2"/>
+        <ellipse cx="92" cy="137" rx="5" ry="3.5" fill="#8A4028" opacity=".42"/>
+        <ellipse cx="108" cy="137" rx="5" ry="3.5" fill="#8A4028" opacity=".42"/>
+        <!-- Cheeks -->
+        <ellipse cx="58" cy="124" rx="18" ry="11" fill="url(#bkL)"/>
+        <ellipse cx="142" cy="124" rx="18" ry="11" fill="url(#bkR)"/>
+        <!-- Mouth — NO teeth -->
+        <path id="uLip" d="M79 148 Q88 144 100 146 Q112 144 121 148 Q113 153 100 152 Q87 153 79 148Z" fill="#8A4028"/>
+        <path d="M86 146 Q100 142 114 146" stroke="#6A2A18" stroke-width="1" fill="none" opacity=".55"/>
+        <path id="lLip" d="M79 148 Q88 157 100 159 Q112 157 121 148" fill="#A05038"/>
+        <path id="lpLine" d="M79 148 Q100 151 121 148" stroke="#6A2018" stroke-width="1.2" fill="none"/>
+        <ellipse id="mOpen" cx="100" cy="152" rx="11" ry="3" fill="#3a0e08" opacity="0"/>
+        <!-- Stubble -->
+        <ellipse cx="100" cy="156" rx="22" ry="9" fill="#6a3018" opacity=".16"/>
+        <!-- Philtrum -->
+        <path d="M96 140 Q99 144 100 145 Q101 144 104 140" stroke="#8A4028" stroke-width=".9" fill="none" opacity=".4"/>
+      </svg>
+      <div id="av-label">Sarthi</div>
+      <div id="av-mood">Tayaar hun</div>
     </div>
   </div>
 </div>
@@ -185,43 +216,121 @@ body{background:var(--bg);color:var(--tx);font-family:'Sora',sans-serif;display:
   </div>
 </div>
 
-<!-- 🤖 Fixed Robot Avatar -->
-<div id="robot-avatar">
-  <svg width="80" height="100" viewBox="0 0 80 100" xmlns="http://www.w3.org/2000/svg">
-    <line x1="40" y1="6" x2="40" y2="18" stroke="#c96442" stroke-width="2" stroke-linecap="round"/>
-    <circle id="ant-dot" cx="40" cy="5" r="3" fill="#e07a52"/>
-    <rect x="12" y="18" width="56" height="44" rx="12" fill="#1a1a1a" stroke="#c96442" stroke-width="1.5"/>
-    <rect x="16" y="22" width="48" height="36" rx="8" fill="#111" opacity="0.6"/>
-    <g id="robot-eye-l">
-      <rect x="20" y="30" width="14" height="14" rx="4" fill="#c96442" opacity="0.15"/>
-      <rect x="22" y="32" width="10" height="10" rx="3" fill="#c96442" opacity="0.7"/>
-      <circle cx="25" cy="35" r="2.5" fill="#ff8c66"/>
-      <circle cx="26.5" cy="33.5" r="1" fill="white" opacity="0.8"/>
-    </g>
-    <g id="robot-eye-r">
-      <rect x="46" y="30" width="14" height="14" rx="4" fill="#c96442" opacity="0.15"/>
-      <rect x="48" y="32" width="10" height="10" rx="3" fill="#c96442" opacity="0.7"/>
-      <circle cx="51" cy="35" r="2.5" fill="#ff8c66"/>
-      <circle cx="52.5" cy="33.5" r="1" fill="white" opacity="0.8"/>
-    </g>
-    <path id="robot-mouth" d="M30 53 Q40 58 50 53" stroke="#c96442" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <circle cx="12" cy="36" r="3.5" fill="#222" stroke="#c96442" stroke-width="1"/>
-    <circle cx="68" cy="36" r="3.5" fill="#222" stroke="#c96442" stroke-width="1"/>
-    <circle cx="12" cy="36" r="1.5" fill="#c96442"/>
-    <circle cx="68" cy="36" r="1.5" fill="#c96442"/>
-    <rect x="34" y="62" width="12" height="8" rx="3" fill="#1a1a1a" stroke="#2a2a2a" stroke-width="1"/>
-    <rect x="10" y="70" width="60" height="26" rx="10" fill="#1a1a1a" stroke="#c96442" stroke-width="1.2"/>
-    <rect x="20" y="76" width="40" height="14" rx="5" fill="#111"/>
-    <circle cx="30" cy="83" r="3" fill="#c96442" opacity="0.9"/>
-    <circle cx="40" cy="83" r="2.5" fill="#888" opacity="0.5"/>
-    <circle cx="50" cy="83" r="3" fill="#c96442" opacity="0.4"/>
-    <circle cx="14" cy="80" r="2" fill="#222" stroke="#c96442" stroke-width="0.8"/>
-    <circle cx="14" cy="90" r="2" fill="#222" stroke="#c96442" stroke-width="0.8"/>
-    <circle cx="66" cy="80" r="2" fill="#222" stroke="#c96442" stroke-width="0.8"/>
-    <circle cx="66" cy="90" r="2" fill="#222" stroke="#c96442" stroke-width="0.8"/>
-  </svg>
-  <div id="robot-name">Sarthi</div>
-</div>
 <script src="/static/app.js"></script>
+<script>
+// ===== SARTHI AVATAR ANIMATIONS =====
+var avBlinkT, avWanderT, avSpeakT, avSpeakPh=0;
+
+function avBlink(){
+  ['ldL','ldR'].forEach(function(id){
+    var e=document.getElementById(id);
+    if(e){ e.setAttribute('ry','9'); e.setAttribute('opacity','1'); }
+  });
+  ['ewL','ewR','irL','irR','puL','puR'].forEach(function(id){
+    var e=document.getElementById(id);
+    if(e){ e.setAttribute('opacity','0'); }
+  });
+  setTimeout(function(){
+    ['ldL','ldR'].forEach(function(id){
+      var e=document.getElementById(id);
+      if(e){ e.setAttribute('ry','1'); e.setAttribute('opacity','0'); }
+    });
+    ['ewL','ewR','irL','irR','puL','puR'].forEach(function(id){
+      var e=document.getElementById(id);
+      if(e){ e.setAttribute('opacity','1'); }
+    });
+  }, 130);
+}
+
+function avSchedBlink(){
+  avBlinkT=setTimeout(function(){ avBlink(); avSchedBlink(); }, 2800+Math.random()*3500);
+}
+
+function avSetEyes(lx,ly,rx,ry){
+  [['irL',lx,ly],['puL',lx,ly],['irR',rx,ry],['puR',rx,ry]].forEach(function(e){
+    var el=document.getElementById(e[0]);
+    if(el){ el.setAttribute('cx',e[1]); el.setAttribute('cy',e[2]); }
+  });
+}
+
+function avWander(){
+  var dx=(Math.random()-.5)*4, dy=(Math.random()-.5)*2.5;
+  avSetEyes(73+dx,111+dy,127+dx,111+dy);
+  avWanderT=setTimeout(avWander, 2500+Math.random()*3000);
+}
+
+var avSpkFrames=[
+  {u:'M79 148 Q88 144 100 146 Q112 144 121 148 Q113 153 100 152 Q87 153 79 148Z',l:'M79 148 Q88 155 100 157 Q112 155 121 148',op:'0'},
+  {u:'M80 147 Q88 141 100 143 Q112 141 120 147 Q112 150 100 149 Q88 150 80 147Z',l:'M80 147 Q88 158 100 161 Q112 158 120 147',op:'0.8'},
+  {u:'M80 148 Q88 145 100 147 Q112 145 120 148 Q112 152 100 151 Q88 152 80 148Z',l:'M80 148 Q88 153 100 155 Q112 153 120 148',op:'0'},
+  {u:'M79 147 Q88 141 100 143 Q112 141 121 147 Q113 151 100 150 Q87 151 79 147Z',l:'M79 147 Q88 160 100 162 Q112 160 121 147',op:'0.85'},
+];
+
+function avStartSpeak(){
+  avSpeakPh=0;
+  avSpeakT=setInterval(function(){
+    var f=avSpkFrames[avSpeakPh%avSpkFrames.length];
+    var u=document.getElementById('uLip'),l=document.getElementById('lLip'),m=document.getElementById('mOpen');
+    if(u) u.setAttribute('d',f.u);
+    if(l) l.setAttribute('d',f.l);
+    if(m) m.setAttribute('opacity',f.op);
+    avSpeakPh++;
+  },175);
+  var md=document.getElementById('av-mood');
+  if(md){ md.textContent='Bol raha hun...'; md.style.color='#e07a52'; }
+}
+
+function avStopSpeak(){
+  clearInterval(avSpeakT);
+  var u=document.getElementById('uLip'),l=document.getElementById('lLip'),m=document.getElementById('mOpen');
+  if(u) u.setAttribute('d','M79 148 Q88 144 100 146 Q112 144 121 148 Q113 153 100 152 Q87 153 79 148Z');
+  if(l) l.setAttribute('d','M79 148 Q88 157 100 159 Q112 157 121 148');
+  if(m) m.setAttribute('opacity','0');
+  var md=document.getElementById('av-mood');
+  if(md){ md.textContent='Tayaar hun'; md.style.color=''; }
+}
+
+function avSetMood(txt,col){
+  var md=document.getElementById('av-mood');
+  if(md){ md.textContent=txt; md.style.color=col||''; }
+}
+
+function avThinking(){
+  clearInterval(avSpeakT); avStopSpeak();
+  var bL=document.getElementById('bL'),bR=document.getElementById('bR');
+  if(bL) bL.setAttribute('d','M62 91 Q72 84 82 89');
+  if(bR) bR.setAttribute('d','M118 87 Q128 84 138 91');
+  avSetEyes(77,109,131,109);
+  avSetMood('Soch raha hun...','#888');
+}
+
+function avReady(){
+  avStopSpeak();
+  var bL=document.getElementById('bL'),bR=document.getElementById('bR');
+  if(bL) bL.setAttribute('d','M62 93 Q74 87 84 90');
+  if(bR) bR.setAttribute('d','M116 90 Q126 87 138 93');
+  avSetEyes(73,111,127,111);
+  avSetMood('Tayaar hun','');
+}
+
+// Hook into existing app.js functions
+var _origSetSt = typeof setSt !== 'undefined' ? setSt : null;
+document.addEventListener('DOMContentLoaded', function(){
+  avSchedBlink();
+  avWander();
+
+  // Override setSt to sync avatar mood
+  if(typeof setSt === 'function'){
+    var origSt = setSt;
+    window.setSt = function(m){
+      origSt(m);
+      if(m==='Thinking...'){ avThinking(); }
+      else if(m==='Speaking...'){ avStartSpeak(); }
+      else if(m==='Ready'){ avReady(); }
+      else if(m==='Listening...'){ avSetMood('Sun raha hun...','#22c55e'); }
+    };
+  }
+});
+</script>
 </body>
 </html>
