@@ -77,26 +77,51 @@ body{background:var(--bg);color:var(--tx);font-family:'Sora',sans-serif;display:
 .ht{text-align:center;font-size:11px;color:var(--mu);margin-top:8px}
 @media(max-width:640px){#sb{display:none}.rw{padding:12px 14px}#iw2{padding:12px 14px 16px}}
 
-/* 🤖 Robot Typewriter Effect */
-.robot-cursor{
-  display:inline-block;
+/* 🤖 Robot Typewriter Cursor */
+.robot-cursor{display:inline-block;color:var(--ac);font-weight:700;font-size:15px;margin-left:1px;animation:rcblink 0.6s steps(1) infinite;}
+@keyframes rcblink{0%,100%{opacity:1}50%{opacity:0}}
+.robot-typing{font-family:'Sora',sans-serif;font-size:14.5px;line-height:1.75;color:var(--tx);letter-spacing:0.01em;}
+
+/* 🤖 Fixed Robot Avatar */
+#robot-avatar{
+  position:fixed;
+  bottom:90px;
+  right:22px;
+  width:80px;
+  z-index:100;
+  pointer-events:none;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:4px;
+}
+#robot-avatar svg{
+  filter:drop-shadow(0 4px 18px rgba(201,100,66,0.35));
+  transition:transform 0.3s ease;
+}
+#robot-avatar:hover svg{transform:scale(1.07) translateY(-3px);}
+#robot-name{
+  font-size:9px;
+  font-weight:600;
   color:var(--ac);
-  font-weight:700;
-  font-size:15px;
-  margin-left:1px;
-  animation:rcblink 0.6s steps(1) infinite;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  opacity:0.8;
 }
-@keyframes rcblink{
-  0%,100%{opacity:1}
-  50%{opacity:0}
+/* Blink eye animation */
+@keyframes robotBlink{
+  0%,92%,100%{transform:scaleY(1);}
+  95%{transform:scaleY(0.08);}
 }
-.robot-typing{
-  font-family:'Sora',sans-serif;
-  font-size:14.5px;
-  line-height:1.75;
-  color:var(--tx);
-  letter-spacing:0.01em;
-}
+#robot-eye-l,#robot-eye-r{transform-origin:center;animation:robotBlink 4s ease-in-out infinite;}
+#robot-eye-r{animation-delay:0.08s;}
+/* Antenna pulse */
+@keyframes antPulse{0%,100%{opacity:0.5;r:3;}50%{opacity:1;r:4.5;}}
+#ant-dot{animation:antPulse 2s ease-in-out infinite;}
+/* Speaking animation */
+@keyframes mouthSpeak{0%,100%{d:path("M30 53 Q40 58 50 53");}50%{d:path("M30 53 Q40 62 50 53");}}
+#robot-mouth.speaking{animation:mouthSpeak 0.35s ease-in-out infinite;}
+@media(max-width:640px){#robot-avatar{display:none;}}
 </style>
 </head>
 <body>
@@ -160,6 +185,43 @@ body{background:var(--bg);color:var(--tx);font-family:'Sora',sans-serif;display:
   </div>
 </div>
 
+<!-- 🤖 Fixed Robot Avatar -->
+<div id="robot-avatar">
+  <svg width="80" height="100" viewBox="0 0 80 100" xmlns="http://www.w3.org/2000/svg">
+    <line x1="40" y1="6" x2="40" y2="18" stroke="#c96442" stroke-width="2" stroke-linecap="round"/>
+    <circle id="ant-dot" cx="40" cy="5" r="3" fill="#e07a52"/>
+    <rect x="12" y="18" width="56" height="44" rx="12" fill="#1a1a1a" stroke="#c96442" stroke-width="1.5"/>
+    <rect x="16" y="22" width="48" height="36" rx="8" fill="#111" opacity="0.6"/>
+    <g id="robot-eye-l">
+      <rect x="20" y="30" width="14" height="14" rx="4" fill="#c96442" opacity="0.15"/>
+      <rect x="22" y="32" width="10" height="10" rx="3" fill="#c96442" opacity="0.7"/>
+      <circle cx="25" cy="35" r="2.5" fill="#ff8c66"/>
+      <circle cx="26.5" cy="33.5" r="1" fill="white" opacity="0.8"/>
+    </g>
+    <g id="robot-eye-r">
+      <rect x="46" y="30" width="14" height="14" rx="4" fill="#c96442" opacity="0.15"/>
+      <rect x="48" y="32" width="10" height="10" rx="3" fill="#c96442" opacity="0.7"/>
+      <circle cx="51" cy="35" r="2.5" fill="#ff8c66"/>
+      <circle cx="52.5" cy="33.5" r="1" fill="white" opacity="0.8"/>
+    </g>
+    <path id="robot-mouth" d="M30 53 Q40 58 50 53" stroke="#c96442" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <circle cx="12" cy="36" r="3.5" fill="#222" stroke="#c96442" stroke-width="1"/>
+    <circle cx="68" cy="36" r="3.5" fill="#222" stroke="#c96442" stroke-width="1"/>
+    <circle cx="12" cy="36" r="1.5" fill="#c96442"/>
+    <circle cx="68" cy="36" r="1.5" fill="#c96442"/>
+    <rect x="34" y="62" width="12" height="8" rx="3" fill="#1a1a1a" stroke="#2a2a2a" stroke-width="1"/>
+    <rect x="10" y="70" width="60" height="26" rx="10" fill="#1a1a1a" stroke="#c96442" stroke-width="1.2"/>
+    <rect x="20" y="76" width="40" height="14" rx="5" fill="#111"/>
+    <circle cx="30" cy="83" r="3" fill="#c96442" opacity="0.9"/>
+    <circle cx="40" cy="83" r="2.5" fill="#888" opacity="0.5"/>
+    <circle cx="50" cy="83" r="3" fill="#c96442" opacity="0.4"/>
+    <circle cx="14" cy="80" r="2" fill="#222" stroke="#c96442" stroke-width="0.8"/>
+    <circle cx="14" cy="90" r="2" fill="#222" stroke="#c96442" stroke-width="0.8"/>
+    <circle cx="66" cy="80" r="2" fill="#222" stroke="#c96442" stroke-width="0.8"/>
+    <circle cx="66" cy="90" r="2" fill="#222" stroke="#c96442" stroke-width="0.8"/>
+  </svg>
+  <div id="robot-name">Sarthi</div>
+</div>
 <script src="/static/app.js"></script>
 </body>
 </html>
