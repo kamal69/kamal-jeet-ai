@@ -1,514 +1,352 @@
-var isL = false, isTM = false, rec = null, curAud = null, mc = 0;
+import os
+import base64
+import urllib.request
+import urllib.parse
+import re
+import json
+import requests
+from flask import Flask, request, jsonify, send_from_directory
+from dotenv import load_dotenv
+from groq import Groq
 
-var ti   = document.getElementById('ti');
-var snd  = document.getElementById('snd');
-var mb   = document.getElementById('mb');
-var tkb  = document.getElementById('tkb');
-var ch   = document.getElementById('ch');
-var clbtn= document.getElementById('clbtn');
-var ncb  = document.getElementById('ncb');
+load_dotenv()
 
-// Event listeners
-snd.addEventListener('click',    function(){ doSend(); });
-clbtn.addEventListener('click',  function(){ doClear(); });
-ncb.addEventListener('click',    function(){ doClear(); });
-mb.addEventListener('click',     function(){ if(isL){ stopL(); } else { startL(); } });
-tkb.addEventListener('click',    function(){ doToggleTalk(); });
+app = Flask(__name__)
 
-ti.addEventListener('input', function(){
-    this.style.height = '26px';
-    var h = this.scrollHeight;
-    this.style.height = (h > 140 ? 140 : h) + 'px';
-    this.style.overflowY = h > 140 ? 'auto' : 'hidden';
-});
+# ============================================================
+# 🔑 API KEYS
+# ============================================================
+GROQ_API_KEY    = os.getenv("GROQ_API_KEY")
+GOOGLE_API_KEY  = os.getenv("GOOGLE_API_KEY")
+GOOGLE_CSE_ID   = os.getenv("GOOGLE_CSE_ID")
+ELEVEN_API_KEY  = os.getenv("ELEVEN_API_KEY")
+TAVILY_API_KEY  = os.getenv("TAVILY_API_KEY")
 
-ti.addEventListener('keydown', function(e){
-    if(e.key === 'Enter' && !e.shiftKey){
-        e.preventDefault();
-        doSend();
-    }
-});
+# ============================================================
+# 🤖 GROQ CLIENT  (replaces Gemini — free & fast)
+# ============================================================
+groq_client = Groq(api_key=GROQ_API_KEY)
 
-// Delegation for suggestion cards and copy buttons
-ch.addEventListener('click', function(e){
-    var sc = e.target.closest('.sc');
-    if(sc){
-        ti.value = sc.getAttribute('data-q');
-        doSend();
-        return;
-    }
-    var cp = e.target.closest('.cpb');
-    if(cp){
-        var el = document.getElementById(cp.getAttribute('data-id'));
-        if(el){
-            navigator.clipboard.writeText(el.innerText).then(function(){
-                cp.textContent = 'Copied!';
-                setTimeout(function(){ cp.textContent = 'Copy'; }, 2000);
-            });
+history = []
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ============================================================
+# 🧠 SYSTEM PROMPT
+# ============================================================
+SYSTEM = (
+    "You are Sarthi AI, a friendly and intelligent assistant. "
+    "You understand Hindi, English, and Hinglish fluently. "
+    "Reply in the SAME language as the user. "
+    "Be natural, helpful, like a dost. Give detailed answers. "
+    "When user asks for an image or picture, reply ONLY with: [IMAGE:search_query] "
+    "When user asks you to write or explain code, wrap code in proper markdown code blocks. "
+    "Never break character."
+)
+
+# ============================================================
+# 🌐 ROUTES
+# ============================================================
+@app.route("/")
+def home():
+    tmpl = os.path.join(BASE_DIR, "templates")
+    if os.path.isfile(os.path.join(tmpl, "index.html")):
+        return send_from_directory(tmpl, "index.html")
+    return send_from_directory(BASE_DIR, "index.html")
+
+@app.route("/static/<path:filename>")
+def static_files(filename):
+    return send_from_directory(os.path.join(BASE_DIR, "static"), filename)
+
+@app.route("/clear", methods=["POST"])
+def clear():
+    global history
+    history = []
+    return jsonify({"status": "cleared"})
+
+
+# ============================================================
+# 💬 MAIN CHAT ROUTE
+# ============================================================
+@app.route("/chat", methods=["POST"])
+def chat():
+    global history
+    try:
+        data   = request.json
+        msg    = data.get("message", "").strip()
+        image  = data.get("image", None)   # base64 image from frontend (optional)
+
+        if not msg and not image:
+            return jsonify({"error": "Empty message"}), 400
+
+        # ── Build user content ──────────────────────────────
+        if image:
+            # Image understanding via Groq vision model
+            user_content = [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image}"
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": msg if msg else "Is image mein kya hai? Detail mein batao."
+                }
+            ]
+        else:
+            user_content = msg
+
+        history.append({"role": "user", "content": user_content if image else msg})
+
+        # ── Web search (Tavily preferred, Google fallback) ──
+        search_context = ""
+        if not image:
+            search_context = tavily_search(msg) or google_search(msg) or ""
+
+        # ── Build messages for Groq ──────────────────────────
+        messages = [{"role": "system", "content": SYSTEM}]
+
+        if search_context:
+            messages.append({
+                "role": "system",
+                "content": f"Real-time web info:\n{search_context}"
+            })
+
+        # Add history (last 10 turns to avoid token overflow)
+        for h in history[-10:]:
+            messages.append({"role": h["role"], "content": h["content"]})
+
+        # ── Groq API Call ────────────────────────────────────
+        model = (
+            "llama-3.2-11b-vision-preview"   # vision model for images
+            if image else
+            "llama-3.3-70b-versatile"        # best free text model
+        )
+
+        response = groq_client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=1024,
+            temperature=0.7
+        )
+
+        reply = response.choices[0].message.content.strip()
+
+        history.append({"role": "assistant", "content": reply})
+
+        # ── Image request detection ──────────────────────────
+        img_match = re.match(r'^\[IMAGE:(.*?)\]$', reply, re.IGNORECASE)
+        if img_match:
+            query     = img_match.group(1)
+            image_url = fetch_image(query)
+            return jsonify({
+                "type":      "image",
+                "image_url": image_url,
+                "query":     query
+            })
+
+        # ── Code block detection ─────────────────────────────
+        has_code = bool(re.search(r'```[\w]*\n', reply))
+
+        # ── TTS (voice) ──────────────────────────────────────
+        # Don't read out giant code blocks — only clean text
+        audio_b64 = None
+        if not has_code:
+            tts_text  = re.sub(r'```[\s\S]*?```', '', reply).strip()
+            audio_b64 = eleven_tts(tts_text)
+
+        return jsonify({
+            "reply":    reply,
+            "audio":    audio_b64,
+            "has_code": has_code
+        })
+
+    except Exception as e:
+        print("CHAT ERROR:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================
+# 🔊 ELEVENLABS TTS  (fixed + robust)
+# ============================================================
+def eleven_tts(text):
+    if not ELEVEN_API_KEY:
+        return None
+    try:
+        # Trim — ElevenLabs free tier has char limit
+        text = text[:500].strip()
+        if not text:
+            return None
+
+        # Strip markdown symbols so voice sounds natural
+        clean = re.sub(r'[*_`#>~\[\]()]', '', text).strip()
+        if not clean:
+            return None
+
+        url = "https://api.elevenlabs.io/v1/text-to-speech/zT03pEAEi0VHKciJODfn"
+        headers = {
+            "xi-api-key":   ELEVEN_API_KEY,
+            "Content-Type": "application/json",
+            "Accept":       "audio/mpeg"
         }
-    }
-});
-
-// Unlock audio autoplay
-document.addEventListener('click', function(){
-    var a = new Audio();
-    a.src = 'data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAA';
-    a.play().catch(function(){});
-}, { once: true });
-
-function setSt(m){
-    document.getElementById('st').textContent = m;
-}
-
-function safeCan(){
-    try {
-        if(window.speechSynthesis){ window.speechSynthesis.cancel(); }
-    } catch(e){}
-}
-
-function escH(t){
-    var s = t || '';
-    var out = '';
-    for(var i = 0; i < s.length; i++){
-        var c = s[i];
-        if(c === '&'){ out += '&amp;'; }
-        else if(c === '<'){ out += '&lt;'; }
-        else if(c === '>'){ out += '&gt;'; }
-        else { out += c; }
-    }
-    return out;
-}
-
-function renderMD(raw){
-    if(!raw){ return ''; }
-    var out = '';
-    var i = 0;
-    while(i < raw.length){
-        var ci = raw.indexOf('```', i);
-        if(ci === -1){
-            out += inlineRender(raw.slice(i));
-            break;
-        }
-        if(ci > i){ out += inlineRender(raw.slice(i, ci)); }
-        var ce = raw.indexOf('```', ci + 3);
-        if(ce === -1){
-            out += inlineRender(raw.slice(ci));
-            break;
-        }
-        var block = raw.slice(ci + 3, ce);
-        var nl = block.indexOf('\n');
-        var lang = 'code';
-        var code = block;
-        if(nl !== -1){
-            var fl = block.slice(0, nl).trim();
-            if(fl && fl.length < 20 && fl.indexOf(' ') === -1){
-                lang = fl;
-                code = block.slice(nl + 1);
+        payload = {
+            "text":       clean,
+            "model_id":   "eleven_multilingual_v2",
+            "voice_settings": {
+                "stability":         0.5,
+                "similarity_boost":  0.85,
+                "style":             0.2,
+                "use_speaker_boost": True
             }
         }
-        var cid = 'c' + Math.random().toString(36).slice(2, 7);
-        out += '<div class="cw"><div class="ch2"><span>' + escH(lang) + '</span>'
-             + '<button class="cpb" data-id="' + cid + '">Copy</button></div>'
-             + '<pre><code id="' + cid + '">' + escH(code.trim()) + '</code></pre></div>';
-        i = ce + 3;
-    }
-    return out;
-}
 
-function inlineRender(s){
-    if(!s.trim()){ return ''; }
-    var out = '';
-    var i = 0;
-    while(i < s.length){
-        if(s.slice(i, i+2) === '**'){
-            var e = s.indexOf('**', i + 2);
-            if(e !== -1){
-                out += '<strong>' + escH(s.slice(i+2, e)) + '</strong>';
-                i = e + 2;
-                continue;
-            }
-        }
-        if(s[i] === '`'){
-            var e2 = s.indexOf('`', i + 1);
-            if(e2 !== -1){
-                out += '<code>' + escH(s.slice(i+1, e2)) + '</code>';
-                i = e2 + 1;
-                continue;
-            }
-        }
-        if(s[i] === '\n'){
-            out += '<br>';
-            i++;
-            continue;
-        }
-        out += escH(s[i]);
-        i++;
-    }
-    return out ? '<p>' + out + '</p>' : '';
-}
+        resp = requests.post(url, headers=headers, json=payload, timeout=15)
 
-function scrollD(){ ch.scrollTop = ch.scrollHeight; }
-function remWel(){ var w = document.getElementById('wl'); if(w){ w.remove(); } }
+        if resp.status_code == 200:
+            return base64.b64encode(resp.content).decode()
+        else:
+            print("TTS HTTP ERROR:", resp.status_code, resp.text[:200])
+            return None
 
-function addUser(t){
-    remWel();
-    mc++;
-    if(mc === 1){
-        document.getElementById('cl').textContent = t.slice(0, 28) + (t.length > 28 ? '...' : '');
-    }
-    var r = document.createElement('div');
-    r.className = 'rw u';
-    r.innerHTML = '<div class="av u">KJ</div><div class="bb"><p>' + escH(t) + '</p></div>';
-    ch.appendChild(r);
-    scrollD();
-}
+    except Exception as e:
+        print("TTS ERROR:", e)
+        return None
 
-// ============================================================
-// 🤖 ROBOT TYPEWRITER EFFECT
-// ============================================================
-function addAI(fullText, onDone){
-    var tr = document.getElementById('tr');
-    if(tr){ tr.remove(); }
 
-    var r = document.createElement('div');
-    r.className = 'rw';
+# ============================================================
+# 🔍 TAVILY SEARCH  (best AI search, free tier available)
+# ============================================================
+def tavily_search(query):
+    if not TAVILY_API_KEY:
+        return None
+    try:
+        resp = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key":        TAVILY_API_KEY,
+                "query":          query,
+                "search_depth":   "basic",
+                "max_results":    3,
+                "include_answer": True
+            },
+            timeout=8
+        )
+        if resp.status_code == 200:
+            data     = resp.json()
+            answer   = data.get("answer", "")
+            results  = data.get("results", [])
+            snippets = [r.get("content", "") for r in results[:3]]
+            combined = (answer + "\n" + "\n".join(snippets)).strip()
+            return combined[:1500] if combined else None
+    except Exception as e:
+        print("TAVILY ERROR:", e)
+    return None
 
-    // Robot prefix badge
-    var bbDiv = document.createElement('div');
-    bbDiv.className = 'bb';
 
-    r.innerHTML = '<div class="av ai">S</div>';
-    r.appendChild(bbDiv);
-    ch.appendChild(r);
-    scrollD();
+# ============================================================
+# 🔍 GOOGLE SEARCH  (fallback)
+# ============================================================
+def google_search(query):
+    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
+        return None
+    try:
+        params = urllib.parse.urlencode({
+            "key": GOOGLE_API_KEY,
+            "cx":  GOOGLE_CSE_ID,
+            "q":   query,
+            "num": 3
+        })
+        url = "https://www.googleapis.com/customsearch/v1?" + params
+        with urllib.request.urlopen(url, timeout=8) as r:
+            data = json.loads(r.read().decode())
+        snippets = [item.get("snippet", "") for item in data.get("items", [])]
+        return "\n".join(snippets)[:1500]
+    except Exception as e:
+        print("GOOGLE SEARCH ERROR:", e)
+        return None
 
-    // Check if reply has code blocks — render instantly if so
-    var hasCodeBlock = fullText.indexOf('```') !== -1;
 
-    if(hasCodeBlock){
-        // Code blocks: render instantly (can't typewrite HTML safely)
-        bbDiv.innerHTML = renderMD(fullText);
-        scrollD();
-        if(onDone){ onDone(); }
-        return;
-    }
+# ============================================================
+# 🖼️ IMAGE FETCH  (Multi-method, no extra API key needed)
+# ============================================================
+def fetch_image(query):
 
-    // Plain text: Robot typewriter character by character
-    var displayed = '';
-    var i = 0;
-    var speed = 18; // ms per character — robot speed
+    # Method 1: Wikimedia / Wikipedia thumbnail (FREE, accurate for famous things)
+    try:
+        search_url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
+            "action":      "query",
+            "titles":      query,
+            "prop":        "pageimages",
+            "format":      "json",
+            "pithumbsize": 600,
+            "redirects":   1
+        })
+        req = urllib.request.Request(search_url, headers={"User-Agent": "SarthiAI/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode())
+        pages = data.get("query", {}).get("pages", {})
+        for page in pages.values():
+            thumb = page.get("thumbnail", {}).get("source")
+            if thumb:
+                print("IMAGE: Wikipedia hit ->", thumb)
+                return thumb
+    except Exception as e:
+        print("WIKIPEDIA ERROR:", e)
 
-    // Blinking cursor element
-    var cursor = document.createElement('span');
-    cursor.className = 'robot-cursor';
-    cursor.textContent = '▮';
-    bbDiv.appendChild(cursor);
+    # Method 2: DuckDuckGo instant answer image (FREE, no key)
+    try:
+        ddg_url = "https://api.duckduckgo.com/?q=" + urllib.parse.quote(query) + "&format=json"
+        req = urllib.request.Request(ddg_url, headers={"User-Agent": "SarthiAI/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode())
+        image = data.get("Image") or data.get("image")
+        if image and str(image).startswith("http"):
+            print("IMAGE: DuckDuckGo hit ->", image)
+            return image
+    except Exception as e:
+        print("DDG ERROR:", e)
 
-    function typeNext(){
-        if(i >= fullText.length){
-            // Done — remove cursor, render final markdown
-            cursor.remove();
-            bbDiv.innerHTML = renderMD(fullText);
-            scrollD();
-            if(onDone){ onDone(); }
-            return;
-        }
+    # Method 3: Google Custom Search (if keys available)
+    if GOOGLE_API_KEY and GOOGLE_CSE_ID:
+        try:
+            params = urllib.parse.urlencode({
+                "key":        GOOGLE_API_KEY,
+                "cx":         GOOGLE_CSE_ID,
+                "q":          query,
+                "searchType": "image",
+                "num":        1,
+                "safe":       "active"
+            })
+            url = "https://www.googleapis.com/customsearch/v1?" + params
+            with urllib.request.urlopen(url, timeout=8) as r:
+                data = json.loads(r.read().decode())
+            items = data.get("items", [])
+            if items:
+                img_url = items[0].get("link")
+                print("IMAGE: Google CSE hit ->", img_url)
+                return img_url
+        except Exception as e:
+            print("GOOGLE IMAGE ERROR:", e)
 
-        // Take next character
-        displayed += fullText[i];
-        i++;
+    # Method 4: Lexica AI art (FREE, no key, beautiful images)
+    try:
+        lex_url = "https://lexica.art/api/v1/search?q=" + urllib.parse.quote(query)
+        req = urllib.request.Request(lex_url, headers={"User-Agent": "SarthiAI/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode())
+        images = data.get("images", [])
+        if images:
+            src = images[0].get("src")
+            print("IMAGE: Lexica hit ->", src)
+            return src
+    except Exception as e:
+        print("LEXICA ERROR:", e)
 
-        // Render partial markdown inline for bold/code, else plain
-        // For typewriter: just show raw text with cursor at end
-        bbDiv.innerHTML = '';
+    # Method 5: Last resort — Picsum random photo
+    seed = abs(hash(query)) % 1000
+    return f"https://picsum.photos/seed/{seed}/600/400"
 
-        // Show partial rendered text
-        var textNode = document.createElement('span');
-        textNode.className = 'robot-typing';
-        // Simple partial render — just escape and show
-        textNode.innerHTML = escH(displayed).replace(/\n/g, '<br>');
-        bbDiv.appendChild(textNode);
 
-        // Re-attach blinking cursor
-        var c2 = document.createElement('span');
-        c2.className = 'robot-cursor';
-        c2.textContent = '▮';
-        bbDiv.appendChild(c2);
-        cursor = c2;
-
-        scrollD();
-
-        // Slightly vary speed for robot feel
-        var delay = speed;
-        // Pause longer at punctuation
-        var ch2 = fullText[i-1];
-        if(ch2 === '.' || ch2 === '!' || ch2 === '?' || ch2 === '\n'){
-            delay = speed * 6;
-        } else if(ch2 === ',' || ch2 === ';' || ch2 === ':'){
-            delay = speed * 3;
-        }
-
-        setTimeout(typeNext, delay);
-    }
-
-    // Small initial delay before robot starts "thinking"
-    setTimeout(typeNext, 120);
-}
-
-function addTyping(){
-    remWel();
-    var r = document.createElement('div');
-    r.className = 'rw';
-    r.id = 'tr';
-    r.innerHTML = '<div class="av ai">S</div><div class="bb"><div class="td"><span></span><span></span><span></span></div></div>';
-    ch.appendChild(r);
-    scrollD();
-}
-
-function addImg(src, lbl){
-    var tr = document.getElementById('tr');
-    if(tr){ tr.remove(); }
-    var r = document.createElement('div');
-    r.className = 'rw';
-    r.innerHTML = '<div class="av ai">S</div><div class="bb"><div class="iw">'
-        + '<img src="' + src + '" onerror="this.parentElement.innerHTML=\'Image load nahi hui\'">'
-        + '<div class="il">' + escH(lbl || 'Image') + '</div></div></div>';
-    ch.appendChild(r);
-    scrollD();
-}
-
-function welHTML(){
-    return '<div class="wi">&#129302;</div>'
-        + '<div class="wt">Sarthi AI</div>'
-        + '<div class="ws">Hindi, English, Hinglish &#8212; sab samajhta hun.</div>'
-        + '<div class="sg">'
-        + '<div class="sc" data-q="Python mein inheritance kya hota hai"><strong>&#128187; Code</strong>Python inheritance explain karo</div>'
-        + '<div class="sc" data-q="Taj Mahal ki image dikhao"><strong>&#128444; Image</strong>Taj Mahal dikhao</div>'
-        + '<div class="sc" data-q="Aaj ka weather kaisa hai"><strong>&#128172; Baat</strong>Koi bhi sawaal poochho</div>'
-        + '<div class="sc" data-q="Mujhe motivate karo"><strong>&#10024; Motivation</strong>Motivational quote do</div>'
-        + '</div>';
-}
-
-function doClear(){
-    mc = 0;
-    ch.innerHTML = '';
-    var w = document.createElement('div');
-    w.id = 'wl';
-    w.innerHTML = welHTML();
-    ch.appendChild(w);
-    document.getElementById('cl').textContent = 'New conversation';
-    setSt('Ready');
-    fetch('/clear', { method: 'POST' }).catch(function(){});
-}
-
-function doSend(){
-    var msg = ti.value.trim();
-    if(!msg){ return; }
-    addUser(msg);
-    ti.value = '';
-    ti.style.height = '26px';
-    ti.style.overflowY = 'hidden';
-    addTyping();
-    setSt('Thinking...');
-
-    fetch('/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg })
-    })
-    .then(function(r){
-        if(!r.ok){ return r.json().catch(function(){ return {error: 'Server error ' + r.status}; }); }
-        return r.json();
-    })
-    .then(function(d){
-        if(d.error){
-            var tr = document.getElementById('tr');
-            if(tr){ tr.remove(); }
-            addAI('⚠️ Error: ' + d.error);
-            setSt('Error');
-            if(isTM){ startL(); }
-            return;
-        }
-        if(d.type === 'image'){
-            if(d.image_url){ addImg(d.image_url, d.query || ''); }
-            else { addAI('Image nahi mili: ' + (d.query || '')); }
-            setSt('Ready');
-            if(isTM){ startL(); }
-            return;
-        }
-        var rep = d.reply || '';
-        if(!rep){
-            var tr = document.getElementById('tr');
-            if(tr){ tr.remove(); }
-            addAI('⚠️ Koi response nahi mila. Dobara try karo.');
-            setSt('Ready');
-            if(isTM){ startL(); }
-            return;
-        }
-
-        setSt('Typing...');
-
-        // Robot typewriter — audio plays AFTER typing done
-        addAI(rep, function(){
-            setSt('Ready');
-            if(d.audio){
-                if(curAud){ curAud.pause(); curAud = null; }
-                safeCan();
-                var au = new Audio('data:audio/mp3;base64,' + d.audio);
-                curAud = au;
-                setSt('Speaking...');
-                au.onended = function(){ curAud = null; setSt('Ready'); if(isTM){ startL(); } };
-                au.onerror = function(){ curAud = null; spk(rep, function(){ if(isTM){ startL(); } }); };
-                au.play().catch(function(){ spk(rep, function(){ if(isTM){ startL(); } }); });
-            } else {
-                spk(rep, function(){ if(isTM){ startL(); } });
-            }
-        });
-    })
-    .catch(function(e){
-        var tr = document.getElementById('tr');
-        if(tr){ tr.remove(); }
-        addAI('⚠️ Network Error: ' + e.message);
-        setSt('Error');
-        if(isTM){ startL(); }
-    });
-}
-
-function spk(text, onEnd){
-    if(!text || !window.speechSynthesis){
-        if(onEnd){ onEnd(); }
-        return;
-    }
-    safeCan();
-
-    var clean = '';
-    var i = 0;
-    while(i < text.length){
-        var ci = text.indexOf('```', i);
-        if(ci === -1){ clean += text.slice(i); break; }
-        if(ci > i){ clean += text.slice(i, ci); }
-        var ce = text.indexOf('```', ci + 3);
-        if(ce === -1){ break; }
-        clean += ' code block. ';
-        i = ce + 3;
-    }
-    clean = clean.split('**').join('').split('`').join('').trim();
-    if(!clean){ if(onEnd){ onEnd(); } return; }
-
-    var words = clean.split(' ');
-    var chunks = [];
-    var cur = '';
-    for(var w = 0; w < words.length; w++){
-        var candidate = cur ? cur + ' ' + words[w] : words[w];
-        if(candidate.length > 150){
-            if(cur){ chunks.push(cur); }
-            cur = words[w];
-        } else {
-            cur = candidate;
-        }
-    }
-    if(cur){ chunks.push(cur); }
-    if(!chunks.length){ if(onEnd){ onEnd(); } return; }
-
-    var voices = window.speechSynthesis.getVoices();
-    var idx = 0;
-
-    var ka = setInterval(function(){
-        if(!window.speechSynthesis || !window.speechSynthesis.speaking){
-            clearInterval(ka);
-            return;
-        }
-        window.speechSynthesis.pause();
-        window.speechSynthesis.resume();
-    }, 10000);
-
-    function speakNext(){
-        if(idx >= chunks.length){
-            clearInterval(ka);
-            setSt('Ready');
-            if(onEnd){ onEnd(); }
-            return;
-        }
-        var u = new SpeechSynthesisUtterance(chunks[idx]);
-        idx++;
-        var isH = false;
-        for(var c = 0; c < u.text.length; c++){
-            var code = u.text.charCodeAt(c);
-            if(code >= 0x0900 && code <= 0x097F){ isH = true; break; }
-        }
-        var v = null;
-        for(var vi = 0; vi < voices.length; vi++){
-            if(isH && voices[vi].lang.slice(0,2) === 'hi'){ v = voices[vi]; break; }
-            if(!isH && voices[vi].lang === 'en-IN'){ v = voices[vi]; break; }
-        }
-        if(!v){
-            for(var vi2 = 0; vi2 < voices.length; vi2++){
-                if(voices[vi2].lang.slice(0,2) === 'en'){ v = voices[vi2]; break; }
-            }
-        }
-        if(v){ u.voice = v; }
-        u.lang = isH ? 'hi-IN' : 'en-IN';
-        u.rate = 0.82; u.pitch = 1.08; u.volume = 1.0;
-        u.onend = speakNext;
-        u.onerror = function(){ clearInterval(ka); setSt('Ready'); if(onEnd){ onEnd(); } };
-        window.speechSynthesis.speak(u);
-    }
-
-    setSt('Speaking...');
-    speakNext();
-}
-
-if(window.speechSynthesis && window.speechSynthesis.onvoiceschanged !== undefined){
-    window.speechSynthesis.onvoiceschanged = function(){
-        window.speechSynthesis.getVoices();
-    };
-}
-
-function doToggleTalk(){
-    isTM = !isTM;
-    if(isTM){
-        tkb.textContent = 'Stop';
-        tkb.classList.add('on');
-        setSt('Talk Mode ON');
-        startL();
-    } else {
-        tkb.textContent = 'Talk';
-        tkb.classList.remove('on');
-        stopL();
-        safeCan();
-        if(curAud){ curAud.pause(); curAud = null; }
-        setSt('Ready');
-    }
-}
-
-function bldRec(){
-    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if(!SR){ alert('Chrome use karein mic ke liye!'); return null; }
-    var r = new SR();
-    r.lang = 'hi-IN';
-    r.interimResults = false;
-    r.maxAlternatives = 1;
-    r.onstart  = function(){ isL = true; mb.classList.add('on'); setSt('Listening...'); };
-    r.onresult = function(e){ ti.value = e.results[0][0].transcript; stopL(); doSend(); };
-    r.onerror  = function(e){ stopL(); setSt('Mic error: ' + e.error); };
-    r.onend    = function(){ stopL(); };
-    return r;
-}
-
-function startL(){
-    if(isL){ return; }
-    safeCan();
-    if(curAud){ curAud.pause(); curAud = null; }
-    rec = bldRec();
-    if(!rec){ return; }
-    try { rec.start(); } catch(e){ console.warn(e); }
-}
-
-function stopL(){
-    isL = false;
-    mb.classList.remove('on');
-    if(rec){
-        try { rec.stop(); } catch(e){}
-        rec = null;
-    }
-}
+# ============================================================
+if __name__ == "__main__":
+    app.run(debug=True)
