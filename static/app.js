@@ -60,6 +60,11 @@ function setSt(m){
     document.getElementById('st').textContent = m;
 }
 
+function setRobotSpeaking(on){
+    var mouth = document.getElementById('robot-mouth');
+    if(mouth){ mouth.classList.toggle('speaking', on); }
+}
+
 function safeCan(){
     try {
         if(window.speechSynthesis){ window.speechSynthesis.cancel(); }
@@ -357,9 +362,10 @@ function doSend(){
                 var au = new Audio('data:audio/mp3;base64,' + d.audio);
                 curAud = au;
                 setSt('Speaking...');
-                au.onended = function(){ curAud = null; setSt('Ready'); if(isTM){ startL(); } };
-                au.onerror = function(){ curAud = null; spk(rep, function(){ if(isTM){ startL(); } }); };
-                au.play().catch(function(){ spk(rep, function(){ if(isTM){ startL(); } }); });
+                setRobotSpeaking(true);
+                au.onended = function(){ curAud = null; setSt('Ready'); setRobotSpeaking(false); if(isTM){ startL(); } };
+                au.onerror = function(){ curAud = null; setRobotSpeaking(false); spk(rep, function(){ if(isTM){ startL(); } }); };
+                au.play().catch(function(){ setRobotSpeaking(false); spk(rep, function(){ if(isTM){ startL(); } }); });
             } else {
                 spk(rep, function(){ if(isTM){ startL(); } });
             }
@@ -426,6 +432,7 @@ function spk(text, onEnd){
         if(idx >= chunks.length){
             clearInterval(ka);
             setSt('Ready');
+            setRobotSpeaking(false);
             if(onEnd){ onEnd(); }
             return;
         }
@@ -455,6 +462,7 @@ function spk(text, onEnd){
     }
 
     setSt('Speaking...');
+    setRobotSpeaking(true);
     speakNext();
 }
 
