@@ -191,7 +191,7 @@ def eleven_tts(text):
         if not clean:
             return None
 
-        url = "https://api.elevenlabs.io/v1/text-to-speech/TxGEqnHWrfWFTfGW9XjX"
+        url = "https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL"
         headers = {
             "xi-api-key":   ELEVEN_API_KEY,
             "Content-Type": "application/json",
