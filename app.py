@@ -23,7 +23,7 @@ ELEVEN_API_KEY  = os.getenv("ELEVEN_API_KEY")
 TAVILY_API_KEY  = os.getenv("TAVILY_API_KEY")
 
 # ============================================================
-# 🤖 GROQ CLIENT  (replaces Gemini — free & fast)
+# 🤖 GROQ CLIENT
 # ============================================================
 groq_client = Groq(api_key=GROQ_API_KEY)
 
@@ -46,7 +46,12 @@ SYSTEM = (
     "Zyada lambe paragraphs mat likh — thodi thodi baat kar, naturally flow karo. "
     "Hinglish, Hindi, English — jo user bole wahi bol tu bhi. "
     "KHAAS RULES: "
-    "Agar image mangein toh sirf [IMAGE:search_query] likh, kuch aur nahi. "
+    "Jab bhi koi visual topic ho (jagah, cheez, animal, food, person, event, etc.) toh apne reply mein "
+    "[IMAGE:english_search_query] tag zaroor likho. "
+    "Example: 'Taj Mahal ke baare mein batao' -> reply mein [IMAGE:Taj Mahal Agra India] likho. "
+    "Example: 'Lion kaise hota hai' -> [IMAGE:African lion wildlife] "
+    "Example: 'Pizza recipe' -> [IMAGE:homemade pizza fresh] "
+    "Sirf tab mat likho jab topic purely conversational, code, ya math ho. "
     "Code explain karna ho toh proper markdown code blocks use kar. "
     "Kabhi character mat todo — Tu Sarthi hai, hamesha Sarthi rahega. "
 )
@@ -79,22 +84,19 @@ def clear():
 def chat():
     global history
     try:
-        data   = request.json
-        msg    = data.get("message", "").strip()
-        image  = data.get("image", None)   # base64 image from frontend (optional)
+        data  = request.json
+        msg   = data.get("message", "").strip()
+        image = data.get("image", None)
 
         if not msg and not image:
             return jsonify({"error": "Empty message"}), 400
 
         # ── Build user content ──────────────────────────────
         if image:
-            # Image understanding via Groq vision model
             user_content = [
                 {
                     "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{image}"
-                    }
+                    "image_url": {"url": f"data:image/jpeg;base64,{image}"}
                 },
                 {
                     "type": "text",
@@ -106,12 +108,12 @@ def chat():
 
         history.append({"role": "user", "content": user_content if image else msg})
 
-        # ── Web search (Tavily preferred, Google fallback) ──
+        # ── Web search ──────────────────────────────────────
         search_context = ""
         if not image:
             search_context = tavily_search(msg) or google_search(msg) or ""
 
-        # ── Build messages for Groq ──────────────────────────
+        # ── Build messages for Groq ─────────────────────────
         messages = [{"role": "system", "content": SYSTEM}]
 
         if search_context:
@@ -120,16 +122,11 @@ def chat():
                 "content": f"Real-time web info:\n{search_context}"
             })
 
-        # Add history (last 10 turns to avoid token overflow)
         for h in history[-10:]:
             messages.append({"role": h["role"], "content": h["content"]})
 
-        # ── Groq API Call ────────────────────────────────────
-        model = (
-            "llama-3.2-11b-vision-preview"   # vision model for images
-            if image else
-            "llama-3.3-70b-versatile"        # best free text model
-        )
+        # ── Groq API Call ───────────────────────────────────
+        model = "llama-3.2-11b-vision-preview" if image else "llama-3.3-70b-versatile"
 
         response = groq_client.chat.completions.create(
             model=model,
@@ -140,33 +137,35 @@ def chat():
 
         reply = response.choices[0].message.content.strip()
 
+        # ── FIX: Extract [IMAGE:...] tag from ANYWHERE in reply ──
+        img_match = re.search(r'\[IMAGE:(.*?)\]', reply, re.IGNORECASE)
+        image_url   = None
+        image_query = None
+
+        if img_match:
+            image_query = img_match.group(1).strip()
+            # Remove the tag from reply text cleanly
+            reply = re.sub(r'\s*\[IMAGE:.*?\]\s*', ' ', reply, flags=re.IGNORECASE).strip()
+            image_url = fetch_image(image_query)
+            print(f"🖼️ IMAGE TAG: '{image_query}' -> {image_url}")
+
         history.append({"role": "assistant", "content": reply})
 
-        # ── Image request detection ──────────────────────────
-        img_match = re.match(r'^\[IMAGE:(.*?)\]$', reply, re.IGNORECASE)
-        if img_match:
-            query     = img_match.group(1)
-            image_url = fetch_image(query)
-            return jsonify({
-                "type":      "image",
-                "image_url": image_url,
-                "query":     query
-            })
-
-        # ── Code block detection ─────────────────────────────
+        # ── Code block detection ────────────────────────────
         has_code = bool(re.search(r'```[\w]*\n', reply))
 
-        # ── TTS (voice) ──────────────────────────────────────
-        # Don't read out giant code blocks — only clean text
+        # ── TTS ─────────────────────────────────────────────
         audio_b64 = None
         if not has_code:
             tts_text  = re.sub(r'```[\s\S]*?```', '', reply).strip()
             audio_b64 = eleven_tts(tts_text)
 
         return jsonify({
-            "reply":    reply,
-            "audio":    audio_b64,
-            "has_code": has_code
+            "reply":       reply,
+            "audio":       audio_b64,
+            "has_code":    has_code,
+            "image_url":   image_url,    # ← Frontend yahan se image dikhaye
+            "image_query": image_query   # ← Caption ke liye
         })
 
     except Exception as e:
@@ -175,18 +174,16 @@ def chat():
 
 
 # ============================================================
-# 🔊 ELEVENLABS TTS  (fixed + robust)
+# 🔊 ELEVENLABS TTS
 # ============================================================
 def eleven_tts(text):
     if not ELEVEN_API_KEY:
         return None
     try:
-        # Trim — ElevenLabs free tier has char limit
         text = text[:500].strip()
         if not text:
             return None
 
-        # Strip markdown symbols so voice sounds natural
         clean = re.sub(r'[*_`#>~\[\]()]', '', text).strip()
         if not clean:
             return None
@@ -201,15 +198,14 @@ def eleven_tts(text):
             "text":       clean,
             "model_id":   "eleven_multilingual_v2",
             "voice_settings": {
-                "stability":         0.5,
-                "similarity_boost":  0.85,
-                "style":             0.2,
+                "stability":        0.5,
+                "similarity_boost": 0.85,
+                "style":            0.2,
                 "use_speaker_boost": True
             }
         }
 
         resp = requests.post(url, headers=headers, json=payload, timeout=15)
-
         if resp.status_code == 200:
             return base64.b64encode(resp.content).decode()
         else:
@@ -222,7 +218,7 @@ def eleven_tts(text):
 
 
 # ============================================================
-# 🔍 TAVILY SEARCH  (best AI search, free tier available)
+# 🔍 TAVILY SEARCH
 # ============================================================
 def tavily_search(query):
     if not TAVILY_API_KEY:
@@ -252,7 +248,7 @@ def tavily_search(query):
 
 
 # ============================================================
-# 🔍 GOOGLE SEARCH  (fallback)
+# 🔍 GOOGLE SEARCH (fallback)
 # ============================================================
 def google_search(query):
     if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
@@ -275,11 +271,11 @@ def google_search(query):
 
 
 # ============================================================
-# 🖼️ IMAGE FETCH  (Multi-method, no extra API key needed)
+# 🖼️ IMAGE FETCH (Multi-method, no extra key needed)
 # ============================================================
 def fetch_image(query):
 
-    # Method 1: Wikimedia / Wikipedia thumbnail (FREE, accurate for famous things)
+    # Method 1: Wikipedia thumbnail (best for famous topics)
     try:
         search_url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
             "action":      "query",
@@ -301,20 +297,20 @@ def fetch_image(query):
     except Exception as e:
         print("WIKIPEDIA ERROR:", e)
 
-    # Method 2: DuckDuckGo instant answer image (FREE, no key)
+    # Method 2: DuckDuckGo instant answer
     try:
         ddg_url = "https://api.duckduckgo.com/?q=" + urllib.parse.quote(query) + "&format=json"
         req = urllib.request.Request(ddg_url, headers={"User-Agent": "SarthiAI/1.0"})
         with urllib.request.urlopen(req, timeout=8) as r:
             data = json.loads(r.read().decode())
-        image = data.get("Image") or data.get("image")
-        if image and str(image).startswith("http"):
-            print("IMAGE: DuckDuckGo hit ->", image)
-            return image
+        img = data.get("Image") or data.get("image")
+        if img and str(img).startswith("http"):
+            print("IMAGE: DuckDuckGo hit ->", img)
+            return img
     except Exception as e:
         print("DDG ERROR:", e)
 
-    # Method 3: Google Custom Search (if keys available)
+    # Method 3: Google Custom Search Images (if keys available)
     if GOOGLE_API_KEY and GOOGLE_CSE_ID:
         try:
             params = urllib.parse.urlencode({
@@ -336,7 +332,7 @@ def fetch_image(query):
         except Exception as e:
             print("GOOGLE IMAGE ERROR:", e)
 
-    # Method 4: Lexica AI art (FREE, no key, beautiful images)
+    # Method 4: Lexica AI art (free, no key)
     try:
         lex_url = "https://lexica.art/api/v1/search?q=" + urllib.parse.quote(query)
         req = urllib.request.Request(lex_url, headers={"User-Agent": "SarthiAI/1.0"})
@@ -350,9 +346,11 @@ def fetch_image(query):
     except Exception as e:
         print("LEXICA ERROR:", e)
 
-    # Method 5: Last resort — Picsum random photo
+    # Method 5: Last resort — Picsum placeholder
     seed = abs(hash(query)) % 1000
-    return f"https://picsum.photos/seed/{seed}/600/400"
+    fallback = f"https://picsum.photos/seed/{seed}/600/400"
+    print("IMAGE: Picsum fallback ->", fallback)
+    return fallback
 
 
 # ============================================================
